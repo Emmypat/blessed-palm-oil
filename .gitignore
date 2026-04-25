@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Build output
+dist/
+build/
+*.egg-info/
+
+# Environment variables
+.env
+*.env.local
+
+# AWS SAM
+.aws-sam/
+samconfig.toml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Python
+*.pyo
+.pytest_cache/
+backend/.env
+backend/.venv/
+backend/cementtrack.db
+
+# Lambda build artefacts (regenerated at deploy time)
+backend/lambda.zip
+backend/lambda_package/

@@ -1,0 +1,152 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: CementTrack API - Lambda + API Gateway (eu-west-1)
+
+Globals:
+  Function:
+    Timeout: 60
+    MemorySize: 512
+    Runtime: python3.12
+    Environment:
+      Variables:
+        ENVIRONMENT: production
+        APP_REGION: eu-west-1
+        SES_SENDER_EMAIL: patkatech@gmail.com
+        S3_BUCKET_NAME: !Ref ReceiptsBucket
+        SNS_RECEIPT_TOPIC_ARN: !Ref ReceiptTopic
+        DATABASE_URL: !Sub
+          - "postgresql+pg8000://${DBUser}:${DBPassword}@${DBHost}:5432/${DBName}"
+          - DBUser: !Ref DBUsername
+            DBPassword: !Ref DBPassword
+            DBHost: !Ref DBHost
+            DBName: !Ref DBName
+        SES_SMTP_USER: !Ref SesSmtpUser
+        SES_SMTP_PASSWORD: !Ref SesSmtpPassword
+
+Parameters:
+  DBHost:
+    Type: String
+    Description: RDS PostgreSQL endpoint
+  DBName:
+    Type: String
+    Default: cementtrack
+  DBUsername:
+    Type: String
+    Default: cementadmin
+  DBPassword:
+    Type: String
+    NoEcho: true
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID for Lambda and VPC endpoints
+  VpcSubnetIds:
+    Type: CommaDelimitedList
+    Description: Subnet IDs for Lambda VPC config
+  VpcSecurityGroupIds:
+    Type: CommaDelimitedList
+    Description: Security group IDs for Lambda VPC config
+  SesSmtpUser:
+    Type: String
+    Description: SES SMTP IAM username
+    Default: ""
+  SesSmtpPassword:
+    Type: String
+    NoEcho: true
+    Description: SES SMTP password (derived from IAM secret key)
+    Default: ""
+
+Resources:
+
+  # S3 bucket for receipt PDFs
+  ReceiptsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "cementtrack-receipts-${AWS::AccountId}"
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldReceipts
+            Status: Enabled
+            ExpirationInDays: 365
+
+  # SNS topic for async receipt delivery
+  ReceiptTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: cementtrack-receipts
+
+  # SNS VPC endpoint so Lambda (in VPC) can publish to SNS
+  SnsVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.sns"
+      VpcId: !Ref VpcId
+      SubnetIds: !Ref VpcSubnetIds
+      SecurityGroupIds: !Ref VpcSecurityGroupIds
+      PrivateDnsEnabled: true
+
+  # Lambda function
+  CementTrackFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: app.main.handler
+      Description: CementTrack FastAPI backend
+      VpcConfig:
+        SubnetIds: !Ref VpcSubnetIds
+        SecurityGroupIds: !Ref VpcSecurityGroupIds
+      Policies:
+        - AWSLambdaVPCAccessExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendRawEmail
+                - ses:SendEmail
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+              Resource: !Sub "arn:aws:s3:::cementtrack-receipts-${AWS::AccountId}/*"
+            - Effect: Allow
+              Action:
+                - sns:Publish
+              Resource: !Ref ReceiptTopic
+      Events:
+        ApiRoot:
+          Type: Api
+          Properties:
+            Path: /
+            Method: ANY
+            RestApiId: !Ref CementTrackApi
+        ApiProxy:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+            RestApiId: !Ref CementTrackApi
+        ReceiptSns:
+          Type: SNS
+          Properties:
+            Topic: !Ref ReceiptTopic
+
+  # API Gateway
+  CementTrackApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Cors:
+        AllowMethods: "'*'"
+        AllowHeaders: "'*'"
+        AllowOrigin: "'*'"
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${CementTrackApi}.execute-api.eu-west-1.amazonaws.com/prod"
+  ReceiptsBucketName:
+    Description: S3 bucket for receipt PDFs
+    Value: !Ref ReceiptsBucket
+  ReceiptTopicArn:
+    Description: SNS topic ARN for receipt delivery
+    Value: !Ref ReceiptTopic
