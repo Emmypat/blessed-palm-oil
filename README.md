@@ -1,8 +1,8 @@
-# Rosemary Cement Depot — Business Manager
+# Blessed Palm Oil — Business Manager
 
-A full-stack business management system built for a cement retailer. Handles inventory, sales, receivables, receipts, and customer management — with dual-control security, offline capability, and a mobile-first PWA experience.
+A full-stack business management system built for a palm oil retailer. Handles inventory, sales, receivables, receipts, and customer management — with dual-control security on every sensitive operation, offline capability, and a mobile-first PWA experience.
 
-Live at **https://d2b423q28erzy0.cloudfront.net**
+Live at **https://d3erw0uu4uv0oh.cloudfront.net**
 
 ---
 
@@ -33,7 +33,7 @@ Live at **https://d2b423q28erzy0.cloudfront.net**
                             │ AWS_PROXY integration
                             ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│               AWS Lambda — rosemary-cement-api                  │
+│               AWS Lambda — blessedpalmoil-api                   │
 │               Python 3.12 · 512 MB · 60 s timeout              │
 │                                                                 │
 │   FastAPI (ASGI via Mangum adapter)                             │
@@ -96,15 +96,38 @@ Lambda ──SNS──► Lambda (receipt handler) ──► SES email + S3 PDF
 ## Key Features & Design Decisions
 
 ### Dual-Control (Maker-Checker) Security
-Every sensitive financial operation requires a **second user** to approve before it takes effect — a pattern common in banking and finance to prevent fraud and errors.
+Every sensitive operation requires a **second user** to approve before it takes effect — a pattern common in banking and finance to prevent fraud and accidental changes.
 
-- **Inventory adjustments** — stock changes are queued as `pending`; a different user must approve or reject. A user cannot approve their own request.
-- **Sales verification** — every recorded sale must be verified by a user other than the one who created it. Unverified sales are clearly flagged in the UI.
+| Operation | Flow |
+|---|---|
+| Inventory stock adjustment | First user submits → second user approves/rejects |
+| Inventory product edit | First user submits → second user approves/rejects |
+| Product deletion | First user requests → second user approves/rejects |
+| Sale verification | Recorded by one user → verified by a different user |
+| Sale deletion | First user requests → second user approves/rejects |
+| Record payment (receivable) | First user submits → second user approves/rejects |
 
-The enforcement is server-side: `requested_by != current_user` is checked on every approve/verify endpoint.
+Enforcement is server-side: `requested_by != current_user.username` is checked on every approve endpoint. A user can never approve their own request.
+
+### Customer Management
+- Any logged-in staff member can add or edit customer details
+- **Duplicate phone prevention** — the API rejects a phone number already registered to another customer
+- **Sell button** on every customer card/row — navigates directly to New Sale with the customer pre-populated
+- **Contact Picker API** in the Add Customer modal — tap "Pick from Contacts" to pull name, phone, and email from the device's native contacts app (Android Chrome and iOS Safari 14.5+)
+
+### Inventory Management
+- **Three-tier stock status**: Depleted (0 units, red) · Low Stock (≤ reorder level, orange) · In Stock (green)
+- **Out of Stock panel** — depleted products are surfaced at the top of the Inventory page with a direct **Restock** button
+- **Edit with dual-control** — editing product details (name, type, unit, price, reorder level, stock qty) queues a pending approval; a second user must confirm before changes apply. The Edit button is disabled and shows "edit pending" while approval is outstanding
+- **Direct stock correction** — the edit form includes a stock qty field for fixing wrong opening balances (approved by second user)
+
+### Receivables & Payments
+- Recording a payment against a credit sale creates a **pending payment** requiring a second user to approve before the balance is updated
+- On mobile the payment button is hidden behind a left swipe to prevent accidental taps
+- Pending payments appear in an amber approval panel at the top of the Receivables page
 
 ### Offline-First Sales Recording
-Sales recorded without internet connectivity are stored in **IndexedDB** on the device. When the connection is restored the app automatically replays them against the API in chronological order. The UI adapts in real-time:
+Sales recorded without internet connectivity are stored in **IndexedDB** on the device. When the connection is restored the app automatically replays them against the API in chronological order.
 
 - Submit button changes to *"Save Offline"* when `navigator.onLine === false`
 - Amber sync banner shows pending count with a *"Sync now"* button
@@ -121,7 +144,7 @@ Fully installable on Android and iOS without an app store:
 - Bottom tab bar on mobile mirrors native app navigation patterns
 
 ### User Management & Access Control
-- 8 named staff accounts seeded automatically on first Lambda cold start
+- 3 named staff accounts seeded automatically on first Lambda cold start (Admin, Blessed, Emmanuel)
 - Initial password `Password123` with **forced change** enforced on first login
 - Default password cannot be reused (validated server-side)
 - Passwords hashed with **bcrypt** (never stored or logged)
@@ -140,7 +163,7 @@ This keeps the Lambda cold-start simple and eliminates migration state managemen
 ## Project Structure
 
 ```
-cement-business/
+blessed-palm-oil/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py            # FastAPI app, startup seeding, schema migrations
@@ -148,9 +171,10 @@ cement-business/
 │   │   ├── config.py          # Pydantic settings (env vars)
 │   │   ├── models/            # ORM models: User, Sale, SaleItem, Product,
 │   │   │                      #   Customer, Receivable, Receipt, Payment,
-│   │   │                      #   InventoryChange
+│   │   │                      #   InventoryChange, PendingDeletion, PendingPayment
 │   │   ├── routers/           # Route handlers: auth, inventory, sales,
-│   │   │                      #   customers, receivables, receipts, dashboard
+│   │   │                      #   customers, receivables, receipts, dashboard,
+│   │   │                      #   analytics, reminders, deletions
 │   │   ├── schemas/           # Pydantic request/response schemas
 │   │   └── utils/             # auth helpers (JWT/bcrypt), PDF, email
 │   ├── requirements.txt
@@ -158,8 +182,9 @@ cement-business/
 ├── frontend/
 │   ├── src/
 │   │   ├── pages/             # Dashboard, Inventory, NewSale, SalesHistory,
-│   │   │                      #   Receivables, Receipts, Customers, Login
-│   │   ├── components/        # Layout (sidebar + bottom nav + sync banner)
+│   │   │                      #   Receivables, Receipts, Customers, Login, Reminders
+│   │   ├── components/        # Layout (sidebar + bottom nav + sync banner),
+│   │   │                      #   SwipeableCard
 │   │   ├── context/           # AuthContext (JWT session)
 │   │   │                      # SyncContext (offline queue state + auto-sync)
 │   │   ├── services/          # Axios API client with JWT interceptor
@@ -184,12 +209,12 @@ pip install -r requirements.txt
 # Create .env
 cat > .env <<EOF
 JWT_SECRET_KEY=dev-secret-change-me
-DATABASE_URL=sqlite:///./cementtrack.db
+DATABASE_URL=sqlite:///./dev.db
 ENVIRONMENT=development
 EOF
 
 uvicorn app.main:app --reload
-# API: http://localhost:8000
+# API:          http://localhost:8000
 # Swagger docs: http://localhost:8000/docs
 ```
 
@@ -197,10 +222,7 @@ uvicorn app.main:app --reload
 ```bash
 cd frontend
 npm install
-
-# Create .env.local
 echo "VITE_API_URL=http://localhost:8000" > .env.local
-
 npm run dev
 # App: http://localhost:5173
 ```
@@ -211,14 +233,13 @@ npm run dev
 
 ### Prerequisites
 - AWS CLI configured (`aws configure`)
-- S3 bucket for Lambda packages: `cementtrack-lambda-<account-id>`
-- Existing VPC + subnets
+- Existing VPC + subnets in `eu-west-1`
 
-### 1 — Deploy infrastructure (first time)
+### 1 — Deploy infrastructure (first time only)
 ```bash
 aws cloudformation deploy \
   --template-file infrastructure.yaml \
-  --stack-name cementtrack \
+  --stack-name blessedpalmoil \
   --parameter-overrides DBPassword=<secret> VpcId=<vpc-id> \
   --capabilities CAPABILITY_NAMED_IAM \
   --region eu-west-1
@@ -228,13 +249,24 @@ aws cloudformation deploy \
 ```bash
 cd backend
 pip install -r requirements.txt --target lambda_package
-cd lambda_package && zip -r ../lambda.zip . && cd ..
-zip -r lambda.zip app/
 
-aws s3 cp lambda.zip s3://cementtrack-lambda-<account-id>/lambda.zip
+python3 -c "
+import zipfile, os
+def add_dir(zf, src, base):
+    for root, dirs, files in os.walk(src):
+        dirs[:] = [d for d in dirs if d != '__pycache__']
+        for f in files:
+            if not f.endswith('.pyc'):
+                zf.write(os.path.join(root, f), base + os.path.join(root, f)[len(src):])
+with zipfile.ZipFile('lambda.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
+    add_dir(zf, 'lambda_package', '')
+    add_dir(zf, 'app', 'app')
+"
+
+aws s3 cp lambda.zip s3://blessedpalmoil-lambda-106083617032/lambda.zip --region eu-west-1
 aws lambda update-function-code \
-  --function-name cementtrack-api \
-  --s3-bucket cementtrack-lambda-<account-id> \
+  --function-name blessedpalmoil-api \
+  --s3-bucket blessedpalmoil-lambda-106083617032 \
   --s3-key lambda.zip \
   --region eu-west-1
 ```
@@ -243,9 +275,9 @@ aws lambda update-function-code \
 ```bash
 cd frontend
 npm run build
-aws s3 sync dist/ s3://cementtrack-frontend-<account-id>/ --delete
+aws s3 sync dist/ s3://blessedpalmoil-frontend-106083617032/ --delete --region eu-west-1
 aws cloudfront create-invalidation \
-  --distribution-id <distribution-id> --paths "/*"
+  --distribution-id EYDEV35Z3QEDF --paths "/*"
 ```
 
 ---
@@ -257,9 +289,10 @@ aws cloudfront create-invalidation \
 | Password storage | bcrypt hashing (never plaintext) |
 | Session tokens | JWT HS256, 12-hour expiry |
 | Forced password change | Server-side `must_change_password` flag |
-| Dual-control | `requested_by ≠ reviewer` enforced on API |
+| Dual-control | `requested_by ≠ reviewer` enforced on every approve endpoint |
 | Database isolation | RDS in private VPC subnet, no public access |
 | Transport security | HTTPS enforced at CloudFront + API Gateway |
+| Duplicate data prevention | Phone uniqueness enforced at API layer |
 
 ---
 
