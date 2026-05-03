@@ -87,7 +87,7 @@ export default function Layout() {
             <X size={20} />
           </button>
         </div>
-        <nav className="px-3 py-4 space-y-1">
+        <nav className="px-3 py-4 space-y-1 pb-32">
           {navItems.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
@@ -104,8 +104,17 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div className="absolute bottom-0 left-0 right-0 px-6 py-4 border-t border-slate-700">
-          <p className="text-xs text-slate-500">v1.0.0 · eu-west-1</p>
+        <div className="absolute bottom-0 left-0 right-0 px-4 py-4 border-t border-slate-700 space-y-3">
+          <div className="flex items-center gap-2 px-2">
+            <div className="w-7 h-7 rounded-full bg-green-600 flex items-center justify-center shrink-0">
+              <span className="text-white font-semibold text-xs">{user?.username?.[0]}</span>
+            </div>
+            <span className="text-sm text-slate-300 truncate">{user?.username}</span>
+          </div>
+          <button onClick={logout}
+            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-red-400 hover:bg-red-600 hover:text-white transition-colors">
+            <LogOut size={16} /> Logout
+          </button>
         </div>
       </aside>
 
@@ -123,8 +132,9 @@ export default function Layout() {
               <span className="text-green-700 font-semibold text-sm">{user?.username?.[0]}</span>
             </div>
             <span className="text-sm text-slate-600 hidden sm:block">{user?.username}</span>
-            <button onClick={logout} className="p-1.5 text-slate-400 hover:text-slate-600" title="Logout">
-              <LogOut size={16} />
+            <button onClick={logout}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-red-500 border border-red-200 hover:bg-red-50 active:scale-95 transition-colors">
+              <LogOut size={14} /> <span>Logout</span>
             </button>
           </div>
         </header>

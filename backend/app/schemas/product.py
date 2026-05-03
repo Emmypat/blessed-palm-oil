@@ -15,7 +15,7 @@ class ProductCreate(ProductBase):
 
 
 class ProductUpdate(ProductBase):
-    pass
+    stock_qty: int = 0
 
 
 class ProductOut(ProductBase):

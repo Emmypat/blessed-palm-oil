@@ -1,18 +1,14 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, DollarSign, AlertCircle } from 'lucide-react'
+import { Search, DollarSign, AlertCircle, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
+import SwipeableCard from '../components/SwipeableCard'
 import { receivablesApi } from '../services/api'
+import { useAuth } from '../context/AuthContext'
 import { formatCurrency, formatDate, groupByMonth } from '../utils/format'
 
-const MOCK_RECEIVABLES = [
-  { id: 1, customer_name: 'Kofi Asante', amount_owed: 1800, amount_paid: 0, sale_id: 3, due_date: '2026-05-01', paid: false, created_at: new Date().toISOString() },
-  { id: 2, customer_name: 'Ama Boateng', amount_owed: 4200, amount_paid: 2000, sale_id: 5, due_date: '2026-04-25', paid: false, created_at: new Date().toISOString() },
-  { id: 3, customer_name: 'Kwame Frimpong', amount_owed: 950, amount_paid: 950, sale_id: 6, due_date: '2026-04-10', paid: true, created_at: new Date().toISOString() },
-]
-
-function PaymentModal({ receivable, onClose, onPay }) {
+function PaymentModal({ receivable, onClose, onRequest }) {
   const { register, handleSubmit, formState: { errors } } = useForm()
   const remaining = receivable.amount_owed - receivable.amount_paid
   const inputCls = 'w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400'
@@ -23,12 +19,15 @@ function PaymentModal({ receivable, onClose, onPay }) {
           <h3 className="font-semibold text-slate-800">Record Payment</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl font-bold p-1">&times;</button>
         </div>
-        <form onSubmit={handleSubmit(onPay)} className="px-6 py-5 space-y-4">
+        <form onSubmit={handleSubmit(onRequest)} className="px-6 py-5 space-y-4">
           <div className="bg-orange-50 rounded-xl p-4">
             <p className="text-sm text-slate-600">Customer: <strong>{receivable.customer_name}</strong></p>
             <p className="text-sm text-slate-600 mt-1">Total Owed: <strong>{formatCurrency(receivable.amount_owed)}</strong></p>
             <p className="text-sm text-slate-600">Paid: <strong>{formatCurrency(receivable.amount_paid)}</strong></p>
             <p className="text-base font-bold text-orange-700 mt-1">Balance: {formatCurrency(remaining)}</p>
+          </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+            <p className="text-xs text-amber-800 font-medium">Requires a second user to approve before it is recorded.</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Amount Paying Now (₦)</label>
@@ -53,7 +52,7 @@ function PaymentModal({ receivable, onClose, onPay }) {
             <button type="button" onClick={onClose}
               className="flex-1 border border-slate-300 text-slate-600 rounded-xl py-3 text-sm hover:bg-slate-50">Cancel</button>
             <button type="submit"
-              className="flex-1 bg-orange-500 text-white rounded-xl py-3 text-sm font-medium hover:bg-orange-600">Record Payment</button>
+              className="flex-1 bg-orange-500 text-white rounded-xl py-3 text-sm font-medium hover:bg-orange-600">Submit for Approval</button>
           </div>
         </form>
       </div>
@@ -63,24 +62,55 @@ function PaymentModal({ receivable, onClose, onPay }) {
 
 export default function Receivables() {
   const qc = useQueryClient()
+  const { user } = useAuth()
   const [search, setSearch] = useState('')
-  const [payReceivable, setPayReceivable] = useState(null)
+  const [requestReceivable, setRequestReceivable] = useState(null)
   const [filter, setFilter] = useState('unpaid')
 
-  const { data: receivables = MOCK_RECEIVABLES } = useQuery({
+  const { data: receivables = [] } = useQuery({
     queryKey: ['receivables'],
     queryFn: () => receivablesApi.getAll().then(r => r.data),
-    placeholderData: MOCK_RECEIVABLES,
   })
 
-  const payMutation = useMutation({
-    mutationFn: ({ id, data }) => receivablesApi.recordPayment(id, data),
-    onSuccess: () => { qc.invalidateQueries(['receivables']); setPayReceivable(null); toast.success('Payment recorded!') },
+  const { data: pendingPayments = [] } = useQuery({
+    queryKey: ['pendingPayments'],
+    queryFn: () => receivablesApi.getPendingPayments().then(r => r.data),
+  })
+
+  const requestMutation = useMutation({
+    mutationFn: ({ id, data }) => receivablesApi.requestPayment(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries(['pendingPayments'])
+      setRequestReceivable(null)
+      toast.success('Payment submitted — awaiting approval from another user')
+    },
+    onError: (e) => toast.error(e.message),
+  })
+
+  const approveMutation = useMutation({
+    mutationFn: receivablesApi.approvePayment,
+    onSuccess: () => {
+      qc.invalidateQueries(['receivables'])
+      qc.invalidateQueries(['pendingPayments'])
+      qc.invalidateQueries(['customers'])
+      toast.success('Payment approved and recorded!')
+    },
+    onError: (e) => toast.error(e.message),
+  })
+
+  const rejectMutation = useMutation({
+    mutationFn: receivablesApi.rejectPayment,
+    onSuccess: () => {
+      qc.invalidateQueries(['pendingPayments'])
+      toast.success('Payment request cancelled')
+    },
     onError: (e) => toast.error(e.message),
   })
 
   const totalOutstanding = receivables.filter(r => !r.paid).reduce((sum, r) => sum + (r.amount_owed - r.amount_paid), 0)
   const overdue = receivables.filter(r => !r.paid && new Date(r.due_date) < new Date()).length
+
+  const pendingReceivableIds = new Set(pendingPayments.map(p => p.receivable_id))
 
   const filtered = receivables
     .filter(r => filter === 'all' || (filter === 'unpaid' && !r.paid) || (filter === 'paid' && r.paid))
@@ -88,6 +118,45 @@ export default function Receivables() {
 
   return (
     <div className="space-y-4">
+
+      {/* Pending payment approvals */}
+      {pendingPayments.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Clock size={16} className="text-amber-600" />
+            <h3 className="text-sm font-semibold text-amber-800">Pending Payment Approvals ({pendingPayments.length})</h3>
+          </div>
+          {pendingPayments.map(p => (
+            <div key={p.id} className="bg-white rounded-lg border border-amber-200 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-800">{p.customer_name}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {formatCurrency(p.amount)} · {p.method.replace('_', ' ')}
+                    {p.reference && ` · ${p.reference}`}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-0.5">Requested by <strong>{p.requested_by}</strong></p>
+                </div>
+                {p.requested_by !== user?.username ? (
+                  <div className="flex gap-1.5 shrink-0">
+                    <button onClick={() => approveMutation.mutate(p.id)} disabled={approveMutation.isPending}
+                      className="flex items-center gap-1 text-xs font-medium text-white bg-green-500 hover:bg-green-600 px-2.5 py-1.5 rounded-lg disabled:opacity-50">
+                      <CheckCircle size={12} /> Approve
+                    </button>
+                    <button onClick={() => rejectMutation.mutate(p.id)} disabled={rejectMutation.isPending}
+                      className="flex items-center gap-1 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg disabled:opacity-50">
+                      <XCircle size={12} /> Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-xs text-amber-600 bg-amber-100 px-2 py-1 rounded-lg shrink-0">Awaiting 2nd user</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Summary */}
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-white rounded-xl border border-slate-200 p-4">
@@ -131,35 +200,39 @@ export default function Receivables() {
           <div key={month}>
             <div className="sticky top-0 z-10 bg-slate-100 text-slate-500 text-xs font-semibold uppercase tracking-wider px-3 py-1.5 rounded-lg mb-2">{month}</div>
             {items.map(r => {
-          const balance = r.amount_owed - r.amount_paid
-          const isOverdue = !r.paid && new Date(r.due_date) < new Date()
-          return (
-            <div key={r.id} className={`bg-white rounded-xl border p-4 ${isOverdue ? 'border-red-200' : 'border-slate-200'}`}>
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <p className="font-semibold text-slate-800">{r.customer_name}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Sale #{r.sale_id}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-bold text-slate-800">{formatCurrency(balance)}</p>
-                  <p className="text-xs text-slate-400">balance</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap text-xs mb-3">
-                <span className={`px-2 py-0.5 rounded-full font-medium ${r.paid ? 'bg-green-100 text-green-700' : isOverdue ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
-                  {r.paid ? 'Paid' : isOverdue ? 'Overdue' : 'Pending'}
-                </span>
-                <span className={`${isOverdue ? 'text-red-600 font-medium' : 'text-slate-500'}`}>Due: {formatDate(r.due_date)}</span>
-                {r.amount_paid > 0 && <span className="text-green-600">Paid: {formatCurrency(r.amount_paid)}</span>}
-              </div>
-              {!r.paid && (
-                <button onClick={() => setPayReceivable(r)}
-                  className="w-full py-2.5 text-sm font-medium text-white bg-orange-500 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98]">
-                  <DollarSign size={16} /> Record Payment
-                </button>
-              )}
-            </div>
-          )
+              const balance = r.amount_owed - r.amount_paid
+              const isOverdue = !r.paid && new Date(r.due_date) < new Date()
+              const isPending = pendingReceivableIds.has(r.id)
+              const swipeActions = !r.paid && !isPending
+                ? [{ label: 'Pay', icon: <DollarSign size={18} />, bg: 'bg-orange-500', onClick: () => setRequestReceivable(r) }]
+                : []
+              return (
+                <SwipeableCard key={r.id} actions={swipeActions}>
+                  <div className={`p-4 ${isOverdue ? 'border-l-4 border-red-400' : ''}`}>
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="font-semibold text-slate-800">{r.customer_name}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">Sale #{r.sale_id}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-slate-800">{formatCurrency(balance)}</p>
+                        <p className="text-xs text-slate-400">balance</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap text-xs">
+                      <span className={`px-2 py-0.5 rounded-full font-medium ${r.paid ? 'bg-green-100 text-green-700' : isOverdue ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
+                        {r.paid ? 'Paid' : isOverdue ? 'Overdue' : 'Pending'}
+                      </span>
+                      <span className={`${isOverdue ? 'text-red-600 font-medium' : 'text-slate-500'}`}>Due: {formatDate(r.due_date)}</span>
+                      {r.amount_paid > 0 && <span className="text-green-600">Paid: {formatCurrency(r.amount_paid)}</span>}
+                      {isPending && <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Payment pending</span>}
+                    </div>
+                    {!r.paid && !isPending && (
+                      <p className="text-xs text-slate-400 mt-2">← Swipe left to record payment</p>
+                    )}
+                  </div>
+                </SwipeableCard>
+              )
             })}
           </div>
         ))}
@@ -191,34 +264,37 @@ export default function Receivables() {
                     <td colSpan={8} className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">{month}</td>
                   </tr>
                   {items.map(r => {
-                const balance = r.amount_owed - r.amount_paid
-                const isOverdue = !r.paid && new Date(r.due_date) < new Date()
-                return (
-                  <tr key={r.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-800">{r.customer_name}</td>
-                    <td className="px-4 py-3 text-slate-500 font-mono">#{r.sale_id}</td>
-                    <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(r.amount_owed)}</td>
-                    <td className="px-4 py-3 text-right text-green-600">{formatCurrency(r.amount_paid)}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-slate-800">{formatCurrency(balance)}</td>
-                    <td className={`px-4 py-3 ${isOverdue ? 'text-red-600 font-medium' : 'text-slate-500'}`}>{formatDate(r.due_date)}</td>
-                    <td className="px-4 py-3 text-center">
-                      {r.paid
-                        ? <span className="text-xs bg-green-100 text-green-700 px-2.5 py-1 rounded-full font-medium">Paid</span>
-                        : isOverdue
-                          ? <span className="text-xs bg-red-100 text-red-700 px-2.5 py-1 rounded-full font-medium">Overdue</span>
-                          : <span className="text-xs bg-orange-100 text-orange-700 px-2.5 py-1 rounded-full font-medium">Pending</span>
-                      }
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {!r.paid && (
-                        <button onClick={() => setPayReceivable(r)}
-                          className="text-xs flex items-center gap-1 text-orange-600 hover:text-orange-800 border border-orange-200 rounded px-2 py-1 ml-auto">
-                          <DollarSign size={12} /> Pay
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                )
+                    const balance = r.amount_owed - r.amount_paid
+                    const isOverdue = !r.paid && new Date(r.due_date) < new Date()
+                    const isPending = pendingReceivableIds.has(r.id)
+                    return (
+                      <tr key={r.id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 font-medium text-slate-800">{r.customer_name}</td>
+                        <td className="px-4 py-3 text-slate-500 font-mono">#{r.sale_id}</td>
+                        <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(r.amount_owed)}</td>
+                        <td className="px-4 py-3 text-right text-green-600">{formatCurrency(r.amount_paid)}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-slate-800">{formatCurrency(balance)}</td>
+                        <td className={`px-4 py-3 ${isOverdue ? 'text-red-600 font-medium' : 'text-slate-500'}`}>{formatDate(r.due_date)}</td>
+                        <td className="px-4 py-3 text-center">
+                          {r.paid
+                            ? <span className="text-xs bg-green-100 text-green-700 px-2.5 py-1 rounded-full font-medium">Paid</span>
+                            : isPending
+                              ? <span className="text-xs bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full font-medium">Awaiting 2nd user</span>
+                              : isOverdue
+                                ? <span className="text-xs bg-red-100 text-red-700 px-2.5 py-1 rounded-full font-medium">Overdue</span>
+                                : <span className="text-xs bg-orange-100 text-orange-700 px-2.5 py-1 rounded-full font-medium">Pending</span>
+                          }
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {!r.paid && !isPending && (
+                            <button onClick={() => setRequestReceivable(r)}
+                              className="text-xs flex items-center gap-1 text-orange-600 hover:text-orange-800 border border-orange-200 rounded px-2 py-1 ml-auto">
+                              <DollarSign size={12} /> Pay
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
                   })}
                 </>
               ))}
@@ -227,9 +303,12 @@ export default function Receivables() {
         </div>
       </div>
 
-      {payReceivable && (
-        <PaymentModal receivable={payReceivable} onClose={() => setPayReceivable(null)}
-          onPay={data => payMutation.mutate({ id: payReceivable.id, data })} />
+      {requestReceivable && (
+        <PaymentModal
+          receivable={requestReceivable}
+          onClose={() => setRequestReceivable(null)}
+          onRequest={data => requestMutation.mutate({ id: requestReceivable.id, data })}
+        />
       )}
     </div>
   )

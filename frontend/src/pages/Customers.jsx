@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, Users, TrendingUp, X, Phone, MessageCircle, Pencil } from 'lucide-react'
+import { Plus, Search, Users, TrendingUp, X, Phone, MessageCircle, Pencil, ShoppingCart, BookUser } from 'lucide-react'
 import SwipeableCard from '../components/SwipeableCard'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
@@ -53,15 +54,41 @@ function PhoneButtons({ phone, small }) {
   )
 }
 
+const contactPickerSupported = typeof navigator !== 'undefined' && 'contacts' in navigator
+
+async function pickFromContacts(setValue) {
+  try {
+    const contacts = await navigator.contacts.select(['name', 'tel', 'email'], { multiple: false })
+    if (!contacts.length) return
+    const c = contacts[0]
+    if (c.name?.[0]) setValue('name', c.name[0])
+    if (c.tel?.[0]) {
+      const digits = c.tel[0].replace(/\D/g, '')
+      setValue('phone', digits.startsWith('234') ? '0' + digits.slice(3) : digits.slice(-11))
+    }
+    if (c.email?.[0]) setValue('email', c.email[0])
+  } catch {
+    // user cancelled — no toast needed
+  }
+}
+
 function CustomerModal({ customer, onClose, onSave }) {
-  const { register, handleSubmit, formState: { errors } } = useForm({ defaultValues: customer || {} })
+  const { register, handleSubmit, setValue, formState: { errors } } = useForm({ defaultValues: customer || {} })
   const inputCls = 'w-full border border-slate-300 rounded-lg px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500'
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
       <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full sm:max-w-md">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <h3 className="font-semibold text-slate-800">{customer ? 'Edit Customer' : 'Add Customer'}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl font-bold p-1">&times;</button>
+          <div className="flex items-center gap-2">
+            {contactPickerSupported && !customer && (
+              <button type="button" onClick={() => pickFromContacts(setValue)}
+                className="flex items-center gap-1.5 text-xs text-green-700 border border-green-200 bg-green-50 rounded-lg px-3 py-1.5 active:scale-95">
+                <BookUser size={13} /> Pick from Contacts
+              </button>
+            )}
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl font-bold p-1">&times;</button>
+          </div>
         </div>
         <form onSubmit={handleSubmit(onSave)} className="px-6 py-5 space-y-4">
           <div>
@@ -165,6 +192,7 @@ function AnalyticsModal({ customer, onClose }) {
 
 export default function Customers() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [editCustomer, setEditCustomer] = useState(null)
@@ -178,12 +206,12 @@ export default function Customers() {
   const createMutation = useMutation({
     mutationFn: customersApi.create,
     onSuccess: () => { qc.invalidateQueries(['customers']); setShowAdd(false); toast.success('Customer added') },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(e.message || 'Failed to add customer'),
   })
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => customersApi.update(id, data),
     onSuccess: () => { qc.invalidateQueries(['customers']); setEditCustomer(null); toast.success('Customer updated') },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(e.message || 'Failed to update customer'),
   })
 
   const filtered = customers.filter(c =>
@@ -217,6 +245,7 @@ export default function Customers() {
         {filtered.map(customer => {
           const status = cycleStatus(customer.last_purchase_date)
           const swipeActions = [
+            { label: 'Sell', icon: <ShoppingCart size={18} />, bg: 'bg-blue-600', onClick: () => navigate('/sales/new', { state: { customer } }) },
             { label: 'Cycle', icon: <TrendingUp size={18} />, bg: 'bg-green-600', onClick: () => setAnalyticsCustomer(customer) },
             { label: 'Edit', icon: <Pencil size={18} />, bg: 'bg-slate-500', onClick: () => setEditCustomer(customer) },
           ]
@@ -304,6 +333,10 @@ export default function Customers() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        <button onClick={() => navigate('/sales/new', { state: { customer } })}
+                          className="text-xs text-blue-700 hover:text-blue-900 border border-blue-200 rounded px-2 py-1 flex items-center gap-1">
+                          <ShoppingCart size={11} /> Sell
+                        </button>
                         <button onClick={() => setAnalyticsCustomer(customer)}
                           className="text-xs text-green-700 hover:text-green-900 border border-green-200 rounded px-2 py-1 flex items-center gap-1">
                           <TrendingUp size={11} /> Cycle

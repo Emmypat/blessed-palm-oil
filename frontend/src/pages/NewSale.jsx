@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { Plus, Trash2, ShoppingCart, WifiOff, Package } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -14,6 +14,8 @@ const labelCls = 'block text-sm font-medium text-slate-700 mb-1'
 
 export default function NewSale() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const preselected = location.state?.customer || null
   const [isCredit, setIsCredit] = useState(false)
   const { refreshCount } = useSync()
   const qtyRefs = useRef({})
@@ -30,10 +32,10 @@ export default function NewSale() {
 
   const { register, control, handleSubmit, watch, setValue } = useForm({
     defaultValues: {
-      customer_id: '',
-      customer_name: '',
-      customer_phone: '',
-      customer_email: '',
+      customer_id: preselected?.id?.toString() || '',
+      customer_name: preselected?.name || '',
+      customer_phone: preselected?.phone || '',
+      customer_email: preselected?.email || '',
       payment_method: 'cash',
       payment_reference: '',
       is_credit: false,

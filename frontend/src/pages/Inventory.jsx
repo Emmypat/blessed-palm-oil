@@ -27,7 +27,7 @@ function Modal({ title, onClose, children }) {
 function ProductForm({ product, onClose, onSave }) {
   const [step, setStep] = useState(1)
   const { register, handleSubmit, trigger, formState: { errors } } = useForm({
-    defaultValues: product || { unit: 'litres' }
+    defaultValues: product || { unit: 'litres', stock_qty: 0 }
   })
   const inputCls = 'w-full border border-slate-300 rounded-lg px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500'
 
@@ -38,7 +38,6 @@ function ProductForm({ product, onClose, onSave }) {
 
   return (
     <div className="space-y-5">
-      {/* Step dots */}
       <div className="flex items-center justify-center gap-2">
         <div className={`h-2 rounded-full transition-all ${step === 1 ? 'w-6 bg-green-600' : 'w-2 bg-green-300'}`} />
         <div className={`h-2 rounded-full transition-all ${step === 2 ? 'w-6 bg-green-600' : 'w-2 bg-slate-200'}`} />
@@ -99,14 +98,14 @@ function ProductForm({ product, onClose, onSave }) {
                 {...register('reorder_level', { required: 'Required', min: 0 })} className={inputCls} placeholder="Alert when stock falls below this" />
               {errors.reorder_level && <p className="text-red-500 text-xs mt-1">{errors.reorder_level.message}</p>}
             </div>
-            {!product && (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Opening Stock</label>
-                <input type="number" inputMode="numeric"
-                  {...register('stock_qty', { required: 'Required', min: 0 })} className={inputCls} placeholder="Current quantity on hand" />
-                {errors.stock_qty && <p className="text-red-500 text-xs mt-1">{errors.stock_qty.message}</p>}
-              </div>
-            )}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                {product ? 'Current Stock (direct correction)' : 'Opening Stock'}
+              </label>
+              <input type="number" inputMode="numeric"
+                {...register('stock_qty', { required: 'Required', min: 0 })} className={inputCls} placeholder="Quantity on hand" />
+              {errors.stock_qty && <p className="text-red-500 text-xs mt-1">{errors.stock_qty.message}</p>}
+            </div>
             <div className="flex gap-3 pt-1">
               <button type="button" onClick={() => setStep(1)}
                 className="flex-1 border border-slate-300 text-slate-600 rounded-xl py-3.5 text-sm active:bg-slate-50 flex items-center justify-center gap-1.5">
@@ -114,7 +113,7 @@ function ProductForm({ product, onClose, onSave }) {
               </button>
               <button type="submit"
                 className="flex-1 bg-green-600 text-white rounded-xl py-3.5 text-sm font-medium active:bg-green-700">
-                {product ? 'Update' : 'Add Product'}
+                {product ? 'Save Changes' : 'Add Product'}
               </button>
             </div>
           </>
@@ -124,29 +123,37 @@ function ProductForm({ product, onClose, onSave }) {
   )
 }
 
-function AdjustModal({ product, onClose, onAdjust }) {
-  const { register, handleSubmit } = useForm({ defaultValues: { reason: 'restock' } })
+function AdjustModal({ product, defaultReason = 'restock', onClose, onAdjust }) {
+  const { register, handleSubmit } = useForm({ defaultValues: { reason: defaultReason } })
   const inputCls = 'w-full border border-slate-300 rounded-lg px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500'
   return (
     <form onSubmit={handleSubmit(onAdjust)} className="space-y-4">
-      <p className="text-sm text-slate-600">Current stock: <strong>{product.stock_qty} {product.unit}</strong></p>
+      <p className="text-sm text-slate-600">
+        Current stock: <strong className={product.stock_qty === 0 ? 'text-red-600' : ''}>{product.stock_qty} {product.unit}</strong>
+      </p>
+      {product.stock_qty === 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 text-xs text-red-700 font-medium">
+          This product is out of stock — requires a second user to approve.
+        </div>
+      )}
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Adjustment Type</label>
         <select {...register('reason')} className={inputCls}>
           <option value="restock">Restock (Add)</option>
-          <option value="correction">Stock Correction</option>
-          <option value="damaged">Damaged / Loss</option>
+          <option value="correction">Stock Correction (Set exact qty)</option>
+          <option value="damaged">Damaged / Loss (Subtract)</option>
         </select>
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Quantity</label>
-        <input type="number" inputMode="numeric" {...register('quantity', { required: true })} className={inputCls} />
+        <input type="number" min="1" inputMode="numeric" autoFocus
+          {...register('quantity', { required: true, min: 1 })} className={inputCls} />
       </div>
       <div className="flex gap-3 pt-2">
         <button type="button" onClick={onClose}
           className="flex-1 border border-slate-300 text-slate-600 rounded-xl py-3.5 text-sm active:bg-slate-50">Cancel</button>
         <button type="submit"
-          className="flex-1 bg-green-600 text-white rounded-xl py-3.5 text-sm font-medium active:bg-green-700">Adjust</button>
+          className="flex-1 bg-green-600 text-white rounded-xl py-3.5 text-sm font-medium active:bg-green-700">Submit for Approval</button>
       </div>
     </form>
   )
@@ -161,6 +168,12 @@ export default function Inventory() {
   const [showAdd, setShowAdd] = useState(false)
   const [editProduct, setEditProduct] = useState(null)
   const [adjustProduct, setAdjustProduct] = useState(null)
+  const [adjustDefaultReason, setAdjustDefaultReason] = useState('restock')
+
+  const openAdjust = (product, reason = 'restock') => {
+    setAdjustDefaultReason(reason)
+    setAdjustProduct(product)
+  }
 
   const { data: products = MOCK_PRODUCTS } = useQuery({
     queryKey: ['inventory'],
@@ -174,8 +187,12 @@ export default function Inventory() {
     onError: (e) => toast.error(e.message),
   })
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => inventoryApi.update(id, data),
-    onSuccess: () => { qc.invalidateQueries(['inventory']); setEditProduct(null); toast.success('Product updated') },
+    mutationFn: ({ id, data }) => inventoryApi.requestEdit(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries(['pendingChanges'])
+      setEditProduct(null)
+      toast.success('Edit submitted — awaiting approval from another user')
+    },
     onError: (e) => toast.error(e.message),
   })
   const adjustMutation = useMutation({
@@ -229,6 +246,14 @@ export default function Inventory() {
     onError: (e) => toast.error(e.message),
   })
 
+  const depleted = products.filter(p => p.stock_qty === 0)
+  const pendingRestockIds = new Set(
+    pendingChanges.filter(c => c.reason === 'restock').map(c => c.product_id)
+  )
+  const pendingEditIds = new Set(
+    pendingChanges.filter(c => c.change_type === 'edit_product').map(c => c.product_id)
+  )
+
   const filtered = products.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
     p.type?.toLowerCase().includes(search.toLowerCase())
@@ -236,8 +261,44 @@ export default function Inventory() {
 
   const pendingDeleteIds = new Set(pendingDeletions.map(d => d.entity_id))
 
+  const stockBadge = (p) => {
+    if (p.stock_qty === 0) return { label: 'Depleted', cls: 'bg-red-100 text-red-700 font-bold' }
+    if (p.stock_qty <= p.reorder_level) return { label: 'Low Stock', cls: 'bg-orange-100 text-orange-600' }
+    return { label: 'In Stock', cls: 'bg-green-100 text-green-600' }
+  }
+
   return (
     <div className="space-y-4">
+
+      {/* Depleted products panel */}
+      {depleted.length > 0 && (
+        <div className="bg-red-50 border border-red-300 rounded-xl p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Package size={16} className="text-red-600" />
+            <h3 className="text-sm font-semibold text-red-800">Out of Stock ({depleted.length})</h3>
+          </div>
+          {depleted.map(p => {
+            const hasPendingRestock = pendingRestockIds.has(p.id)
+            return (
+              <div key={p.id} className="bg-white rounded-lg border border-red-200 p-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-800">{p.name}</p>
+                  <p className="text-xs text-slate-500">{p.type} · {p.unit}</p>
+                </div>
+                {hasPendingRestock ? (
+                  <span className="text-xs text-amber-600 bg-amber-100 px-2 py-1 rounded-lg shrink-0">Restock pending</span>
+                ) : (
+                  <button
+                    onClick={() => openAdjust(p, 'restock')}
+                    className="flex items-center gap-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-lg shrink-0 active:scale-95">
+                    <Plus size={13} /> Restock
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Pending deletions */}
       {pendingDeletions.length > 0 && (
@@ -285,9 +346,7 @@ export default function Inventory() {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-slate-800 truncate">{change.product_name}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {REASON_LABEL[change.payload?.reason] || change.payload?.reason} · qty {change.payload?.quantity}
-                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">{change.description}</p>
                   <p className="text-xs text-slate-400 mt-0.5">Requested by <strong>{change.requested_by}</strong></p>
                 </div>
                 {change.requested_by !== user?.username ? (
@@ -331,11 +390,15 @@ export default function Inventory() {
           </div>
         )}
         {filtered.map(product => {
-          const isLow = product.stock_qty <= product.reorder_level
+          const badge = stockBadge(product)
           const isPendingDelete = pendingDeleteIds.has(product.id)
+          const isPendingEdit = pendingEditIds.has(product.id)
           const swipeActions = [
-            { label: 'Adjust', icon: <ArrowUpDown size={18} />, bg: 'bg-blue-500', onClick: () => setAdjustProduct(product) },
-            { label: 'Edit', icon: <Pencil size={18} />, bg: 'bg-slate-500', onClick: () => setEditProduct(product) },
+            { label: 'Restock', icon: <Plus size={18} />, bg: 'bg-green-600', onClick: () => openAdjust(product, 'restock') },
+            { label: 'Adjust', icon: <ArrowUpDown size={18} />, bg: 'bg-blue-500', onClick: () => openAdjust(product) },
+            isPendingEdit
+              ? { label: 'Edit…', icon: <Pencil size={18} />, bg: 'bg-amber-400', onClick: () => {} }
+              : { label: 'Edit', icon: <Pencil size={18} />, bg: 'bg-slate-500', onClick: () => setEditProduct(product) },
             isPendingDelete
               ? { label: 'Pending', icon: <AlertTriangle size={18} />, bg: 'bg-red-300', onClick: () => {} }
               : { label: 'Delete', icon: <Trash2 size={18} />, bg: 'bg-red-500', onClick: () => requestDeleteMutation.mutate({ id: product.id, label: `${product.name} (${product.type})` }) },
@@ -348,13 +411,14 @@ export default function Inventory() {
                     <p className="font-semibold text-slate-800">{product.name}</p>
                     <p className="text-xs text-slate-500 mt-0.5">{product.type}</p>
                   </div>
-                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${isLow ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                    {isLow ? 'Low Stock' : 'In Stock'}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${badge.cls}`}>{badge.label}</span>
+                    {isPendingEdit && <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Edit pending</span>}
+                  </div>
                 </div>
                 <div className="flex items-center gap-4 text-sm">
                   <span className="text-slate-500">Price: <strong className="text-slate-700">{formatCurrency(product.price)}</strong></span>
-                  <span className="text-slate-500">Stock: <strong className={isLow ? 'text-red-600' : 'text-slate-700'}>{product.stock_qty} {product.unit}</strong></span>
+                  <span className="text-slate-500">Stock: <strong className={product.stock_qty === 0 ? 'text-red-600' : product.stock_qty <= product.reorder_level ? 'text-orange-600' : 'text-slate-700'}>{product.stock_qty} {product.unit}</strong></span>
                 </div>
               </div>
             </SwipeableCard>
@@ -383,28 +447,44 @@ export default function Inventory() {
                 </td></tr>
               )}
               {filtered.map(product => {
-                const isLow = product.stock_qty <= product.reorder_level
+                const badge = stockBadge(product)
+                const isPendingEdit = pendingEditIds.has(product.id)
                 return (
-                  <tr key={product.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-800">{product.name}</td>
+                  <tr key={product.id} className={`hover:bg-slate-50 ${product.stock_qty === 0 ? 'bg-red-50/40' : ''}`}>
+                    <td className="px-4 py-3 font-medium text-slate-800">
+                      {product.name}
+                      {isPendingEdit && <span className="ml-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">edit pending</span>}
+                    </td>
                     <td className="px-4 py-3 text-slate-500">{product.type}</td>
                     <td className="px-4 py-3 text-right font-semibold text-slate-700">{formatCurrency(product.price)}</td>
-                    <td className="px-4 py-3 text-right text-slate-700">{product.stock_qty} {product.unit}</td>
+                    <td className={`px-4 py-3 text-right font-medium ${product.stock_qty === 0 ? 'text-red-600' : product.stock_qty <= product.reorder_level ? 'text-orange-600' : 'text-slate-700'}`}>
+                      {product.stock_qty} {product.unit}
+                    </td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${isLow ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                        {isLow ? 'Low Stock' : 'In Stock'}
-                      </span>
+                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${badge.cls}`}>{badge.label}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => setAdjustProduct(product)}
+                        {product.stock_qty === 0 && (
+                          <button onClick={() => openAdjust(product, 'restock')}
+                            className="text-xs flex items-center gap-1 text-white bg-green-600 hover:bg-green-700 rounded px-2 py-1">
+                            <Plus size={12} /> Restock
+                          </button>
+                        )}
+                        <button onClick={() => openAdjust(product)}
                           className="text-xs flex items-center gap-1 text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-1">
                           <ArrowUpDown size={12} /> Adjust
                         </button>
-                        <button onClick={() => setEditProduct(product)}
-                          className="text-xs flex items-center gap-1 text-slate-600 hover:text-slate-800 border border-slate-200 rounded px-2 py-1">
-                          <Pencil size={12} /> Edit
-                        </button>
+                        {isPendingEdit ? (
+                          <span className="text-xs flex items-center gap-1 text-amber-600 border border-amber-200 bg-amber-50 rounded px-2 py-1">
+                            <Pencil size={12} /> Edit pending
+                          </span>
+                        ) : (
+                          <button onClick={() => setEditProduct(product)}
+                            className="text-xs flex items-center gap-1 text-slate-600 hover:text-slate-800 border border-slate-200 rounded px-2 py-1">
+                            <Pencil size={12} /> Edit
+                          </button>
+                        )}
                         {pendingDeleteIds.has(product.id) ? (
                           <span className="text-xs flex items-center gap-1 text-red-400 border border-red-200 bg-red-50 rounded px-2 py-1">
                             <Trash2 size={12} /> Pending
@@ -437,8 +517,8 @@ export default function Inventory() {
         </Modal>
       )}
       {adjustProduct && (
-        <Modal title={`Adjust Stock – ${adjustProduct.name}`} onClose={() => setAdjustProduct(null)}>
-          <AdjustModal product={adjustProduct} onClose={() => setAdjustProduct(null)}
+        <Modal title={`${adjustDefaultReason === 'restock' ? 'Restock' : 'Adjust Stock'} – ${adjustProduct.name}`} onClose={() => setAdjustProduct(null)}>
+          <AdjustModal product={adjustProduct} defaultReason={adjustDefaultReason} onClose={() => setAdjustProduct(null)}
             onAdjust={data => adjustMutation.mutate({ id: adjustProduct.id, data })} />
         </Modal>
       )}

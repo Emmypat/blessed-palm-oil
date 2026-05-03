@@ -40,7 +40,7 @@ export const inventoryApi = {
   getAll: () => api.get('/inventory'),
   getOne: (id) => api.get(`/inventory/${id}`),
   create: (data) => api.post('/inventory', data),
-  update: (id, data) => api.put(`/inventory/${id}`, data),
+  requestEdit: (id, data) => api.post(`/inventory/${id}/request-edit`, data),
   delete: (id) => api.delete(`/inventory/${id}`),
   adjustStock: (id, data) => api.post(`/inventory/${id}/adjust`, data),
   getPendingChanges: () => api.get('/inventory/changes/pending'),
@@ -69,7 +69,10 @@ export const salesApi = {
 export const receivablesApi = {
   getAll: (params) => api.get('/receivables', { params }),
   getOne: (id) => api.get(`/receivables/${id}`),
-  recordPayment: (id, data) => api.post(`/receivables/${id}/pay`, data),
+  requestPayment: (id, data) => api.post(`/receivables/${id}/request-payment`, data),
+  getPendingPayments: () => api.get('/receivables/pending-payments'),
+  approvePayment: (id) => api.post(`/receivables/pending-payments/${id}/approve`),
+  rejectPayment: (id) => api.post(`/receivables/pending-payments/${id}/reject`),
 }
 
 // Receipts

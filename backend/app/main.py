@@ -9,6 +9,7 @@ from app.models import sale, product, customer, receivable, receipt, payment
 from app.models.user import User
 from app.models.inventory_change import InventoryChange
 from app.models.pending_deletion import PendingDeletion
+from app.models.pending_payment import PendingPayment
 
 from app.routers import inventory, customers, sales, receivables, receipts, dashboard
 from app.routers import auth as auth_router
@@ -39,7 +40,7 @@ with engine.begin() as _conn:
 
 
 def _seed_users():
-    from app.utils.auth import hash_password, verify_password
+    from app.utils.auth import hash_password
     db = SessionLocal()
     try:
         for username in ["Admin", "Blessed", "Emmanuel"]:
@@ -51,16 +52,6 @@ def _seed_users():
                     hashed_password=hash_password("Password123"),
                     must_change_password=True,
                 ))
-            elif username in ("Blessed", "Emmanuel"):
-                # Fix corrupted hash from first cold start if needed
-                try:
-                    ok = verify_password("Password123", user.hashed_password)
-                except Exception:
-                    ok = False
-                if not ok:
-                    print(f"Resetting password for: {username}")
-                    user.hashed_password = hash_password("Password123")
-                    user.must_change_password = True
         db.commit()
         print("Seed users complete")
     except Exception as e:

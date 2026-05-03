@@ -53,6 +53,11 @@ def approve_change(
             product.stock_qty = max(0, product.stock_qty - qty)
         else:  # correction
             product.stock_qty = qty
+    elif change.change_type == "edit_product":
+        editable = {"name", "type", "unit", "price", "reorder_level", "stock_qty"}
+        for key, value in payload.items():
+            if key in editable and value is not None:
+                setattr(product, key, value)
 
     change.status = "approved"
     change.reviewed_by = current_user.username
@@ -125,6 +130,38 @@ def delete(product_id: int, current_user: User = Depends(get_current_user), db: 
     db.commit()
 
 
+@router.post("/{product_id}/request-edit")
+def request_edit(
+    product_id: int,
+    data: ProductUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(404, "Product not found")
+
+    # Check no pending edit already exists for this product
+    existing = db.query(InventoryChange).filter(
+        InventoryChange.product_id == product_id,
+        InventoryChange.change_type == "edit_product",
+        InventoryChange.status == "pending",
+    ).first()
+    if existing:
+        raise HTTPException(400, "An edit is already pending approval for this product")
+
+    change = InventoryChange(
+        product_id=product_id,
+        change_type="edit_product",
+        payload=json.dumps(data.model_dump()),
+        requested_by=current_user.username,
+    )
+    db.add(change)
+    db.commit()
+    db.refresh(change)
+    return {"change_id": change.id, "message": "Edit submitted — awaiting approval from another user"}
+
+
 @router.post("/{product_id}/adjust")
 def request_adjust_stock(
     product_id: int,
@@ -150,13 +187,21 @@ def request_adjust_stock(
 
 def _change_out(c: InventoryChange) -> dict:
     payload = json.loads(c.payload)
+    if c.change_type == "edit_product":
+        description = "Product edit"
+    else:
+        reason = payload.get("reason", "")
+        label = {"restock": "Restock (+)", "damaged": "Damaged (−)", "correction": "Correction (=)"}.get(reason, reason)
+        description = f"{label} · qty {payload.get('quantity')}"
     return {
         "id": c.id,
         "product_id": c.product_id,
         "product_name": c.product.name if c.product else "Unknown",
         "change_type": c.change_type,
+        "description": description,
         "quantity": payload.get("quantity"),
         "reason": payload.get("reason"),
+        "payload": payload,
         "requested_by": c.requested_by,
         "status": c.status,
         "reviewed_by": c.reviewed_by,

@@ -22,6 +22,10 @@ def get_one(customer_id: int, db: Session = Depends(get_db)):
 
 @router.post("", response_model=CustomerOut, status_code=201)
 def create(data: CustomerCreate, db: Session = Depends(get_db)):
+    if data.phone and data.phone.strip():
+        existing = db.query(Customer).filter(Customer.phone == data.phone.strip()).first()
+        if existing:
+            raise HTTPException(400, f"Phone number is already registered to {existing.name}")
     customer = Customer(**data.model_dump())
     db.add(customer)
     db.commit()
@@ -34,6 +38,13 @@ def update(customer_id: int, data: CustomerUpdate, db: Session = Depends(get_db)
     customer = db.get(Customer, customer_id)
     if not customer:
         raise HTTPException(404, "Customer not found")
+    if data.phone and data.phone.strip():
+        existing = db.query(Customer).filter(
+            Customer.phone == data.phone.strip(),
+            Customer.id != customer_id,
+        ).first()
+        if existing:
+            raise HTTPException(400, f"Phone number is already registered to {existing.name}")
     for key, value in data.model_dump().items():
         setattr(customer, key, value)
     db.commit()
