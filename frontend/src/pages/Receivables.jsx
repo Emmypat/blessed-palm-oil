@@ -1,12 +1,14 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, DollarSign, AlertCircle, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { Search, DollarSign, AlertCircle, CheckCircle, XCircle, Clock, MessageCircle, ExternalLink } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import SwipeableCard from '../components/SwipeableCard'
 import { receivablesApi } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency, formatDate, groupByMonth } from '../utils/format'
+import { openWhatsAppChat, waMessages } from '../utils/whatsapp'
 
 function PaymentModal({ receivable, onClose, onRequest }) {
   const { register, handleSubmit, formState: { errors } } = useForm()
@@ -63,9 +65,17 @@ function PaymentModal({ receivable, onClose, onRequest }) {
 export default function Receivables() {
   const qc = useQueryClient()
   const { user } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [requestReceivable, setRequestReceivable] = useState(null)
   const [filter, setFilter] = useState('unpaid')
+
+  useEffect(() => {
+    if (location.state?.filterCustomerName) {
+      setSearch(location.state.filterCustomerName)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: receivables = [] } = useQuery({
     queryKey: ['receivables'],
@@ -212,7 +222,11 @@ export default function Receivables() {
                     <div className="flex items-start justify-between mb-2">
                       <div>
                         <p className="font-semibold text-slate-800">{r.customer_name}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">Sale #{r.sale_id}</p>
+                        <button
+                          onClick={() => navigate('/sales/history', { state: { searchSaleId: r.sale_id } })}
+                          className="text-xs text-indigo-600 hover:underline mt-0.5">
+                          Sale #{r.sale_id} →
+                        </button>
                       </div>
                       <div className="text-right">
                         <p className="font-bold text-slate-800">{formatCurrency(balance)}</p>
@@ -227,6 +241,17 @@ export default function Receivables() {
                       {r.amount_paid > 0 && <span className="text-green-600">Paid: {formatCurrency(r.amount_paid)}</span>}
                       {isPending && <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Payment pending</span>}
                     </div>
+                    {!r.paid && r.customer_phone && (
+                      <div className="mt-2">
+                        <button
+                          onClick={() => openWhatsAppChat(r.customer_phone, waMessages.paymentChase(r.customer_name, formatCurrency(r.amount_owed - r.amount_paid)))}
+                          className="inline-flex items-center gap-1 text-green-600 hover:text-green-700 text-xs font-medium"
+                          title="Send payment reminder via WhatsApp"
+                        >
+                          <MessageCircle size={13} /> Chase via WhatsApp
+                        </button>
+                      </div>
+                    )}
                     {!r.paid && !isPending && (
                       <p className="text-xs text-slate-400 mt-2">← Swipe left to record payment</p>
                     )}
@@ -270,7 +295,14 @@ export default function Receivables() {
                     return (
                       <tr key={r.id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 font-medium text-slate-800">{r.customer_name}</td>
-                        <td className="px-4 py-3 text-slate-500 font-mono">#{r.sale_id}</td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => navigate('/sales/history', { state: { searchSaleId: r.sale_id } })}
+                            className="text-indigo-600 hover:underline font-mono text-sm flex items-center gap-0.5"
+                          >
+                            #{r.sale_id} <ExternalLink size={11} />
+                          </button>
+                        </td>
                         <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(r.amount_owed)}</td>
                         <td className="px-4 py-3 text-right text-green-600">{formatCurrency(r.amount_paid)}</td>
                         <td className="px-4 py-3 text-right font-semibold text-slate-800">{formatCurrency(balance)}</td>
@@ -286,12 +318,23 @@ export default function Receivables() {
                           }
                         </td>
                         <td className="px-4 py-3 text-right">
-                          {!r.paid && !isPending && (
-                            <button onClick={() => setRequestReceivable(r)}
-                              className="text-xs flex items-center gap-1 text-orange-600 hover:text-orange-800 border border-orange-200 rounded px-2 py-1 ml-auto">
-                              <DollarSign size={12} /> Pay
-                            </button>
-                          )}
+                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                            {!r.paid && r.customer_phone && (
+                              <button
+                                onClick={() => openWhatsAppChat(r.customer_phone, waMessages.paymentChase(r.customer_name, formatCurrency(r.amount_owed - r.amount_paid)))}
+                                className="text-xs flex items-center gap-1 text-green-600 hover:text-green-800 border border-green-200 rounded px-2 py-1"
+                                title="Send payment reminder via WhatsApp"
+                              >
+                                <MessageCircle size={12} /> Chase
+                              </button>
+                            )}
+                            {!r.paid && !isPending && (
+                              <button onClick={() => setRequestReceivable(r)}
+                                className="text-xs flex items-center gap-1 text-orange-600 hover:text-orange-800 border border-orange-200 rounded px-2 py-1">
+                                <DollarSign size={12} /> Pay
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     )

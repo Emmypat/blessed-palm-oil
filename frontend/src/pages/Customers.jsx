@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, Users, TrendingUp, X, Phone, MessageCircle, Pencil, ShoppingCart, BookUser } from 'lucide-react'
+import { Plus, Search, Users, TrendingUp, X, Phone, MessageCircle, Pencil, ShoppingCart, BookUser, History } from 'lucide-react'
 import SwipeableCard from '../components/SwipeableCard'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import { customersApi, analyticsApi } from '../services/api'
 import { formatCurrency, formatDate } from '../utils/format'
+import { openWhatsAppChat, waMessages } from '../utils/whatsapp'
 
 function cycleStatus(lastPurchaseDateStr) {
   if (!lastPurchaseDateStr) return null
@@ -24,9 +25,8 @@ function toIntlPhone(phone) {
   return digits
 }
 
-function PhoneButtons({ phone, small }) {
+function PhoneButtons({ phone, customerName, small }) {
   if (!phone) return null
-  const intl = toIntlPhone(phone)
   const sz = small ? 13 : 14
   return (
     <div className="flex gap-1.5">
@@ -39,17 +39,15 @@ function PhoneButtons({ phone, small }) {
         <Phone size={sz} />
         {!small && <span>Call</span>}
       </a>
-      <a
-        href={`https://wa.me/${intl}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={e => e.stopPropagation()}
+      <button
+        type="button"
+        onClick={e => { e.stopPropagation(); openWhatsAppChat(phone, waMessages.generalContact(customerName || '')) }}
         className={`flex items-center gap-1 px-2 py-1 rounded-lg border border-green-200 text-green-700 hover:bg-green-50 active:scale-95 ${small ? 'text-xs' : 'text-sm'}`}
-        title="WhatsApp"
+        title={`Chat with ${customerName || 'customer'} on WhatsApp`}
       >
         <MessageCircle size={sz} />
         {!small && <span>WhatsApp</span>}
-      </a>
+      </button>
     </div>
   )
 }
@@ -246,6 +244,7 @@ export default function Customers() {
           const status = cycleStatus(customer.last_purchase_date)
           const swipeActions = [
             { label: 'Sell', icon: <ShoppingCart size={18} />, bg: 'bg-blue-600', onClick: () => navigate('/sales/new', { state: { customer } }) },
+            { label: 'Sales', icon: <History size={18} />, bg: 'bg-indigo-600', onClick: () => navigate('/sales/history', { state: { filterCustomerName: customer.name } }) },
             { label: 'Cycle', icon: <TrendingUp size={18} />, bg: 'bg-green-600', onClick: () => setAnalyticsCustomer(customer) },
             { label: 'Edit', icon: <Pencil size={18} />, bg: 'bg-slate-500', onClick: () => setEditCustomer(customer) },
           ]
@@ -258,7 +257,7 @@ export default function Customers() {
                     {customer.phone && (
                       <div className="mt-1.5">
                         <p className="text-xs text-slate-500 mb-1">{customer.phone}</p>
-                        <PhoneButtons phone={customer.phone} small />
+                        <PhoneButtons phone={customer.phone} customerName={customer.name} small />
                       </div>
                     )}
                     {customer.email && <p className="text-xs text-slate-400 mt-1 truncate">{customer.email}</p>}
@@ -268,7 +267,12 @@ export default function Customers() {
                   </div>
                   <div className="text-right shrink-0 ml-2">
                     {customer.balance_owed > 0
-                      ? <span className="font-semibold text-red-600 text-sm">{formatCurrency(customer.balance_owed)}</span>
+                      ? (
+                        <button onClick={() => navigate('/receivables', { state: { filterCustomerId: customer.id, filterCustomerName: customer.name } })}
+                          className="font-semibold text-red-600 text-sm hover:underline">
+                          {formatCurrency(customer.balance_owed)}
+                        </button>
+                      )
                       : <span className="text-xs text-green-600 font-medium">Cleared</span>
                     }
                     {customer.balance_owed > 0 && <p className="text-xs text-slate-400">owed</p>}
@@ -313,7 +317,7 @@ export default function Customers() {
                     <td className="px-4 py-3 font-medium text-slate-800">{customer.name}</td>
                     <td className="px-4 py-3">
                       {customer.phone
-                        ? <div className="space-y-1"><p className="text-sm text-slate-600">{customer.phone}</p><PhoneButtons phone={customer.phone} small /></div>
+                        ? <div className="space-y-1"><p className="text-sm text-slate-600">{customer.phone}</p><PhoneButtons phone={customer.phone} customerName={customer.name} small /></div>
                         : <span className="text-slate-400">—</span>}
                     </td>
                     <td className="px-4 py-3 text-slate-500">{customer.email || '—'}</td>
@@ -328,7 +332,12 @@ export default function Customers() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       {customer.balance_owed > 0
-                        ? <span className="font-semibold text-red-600">{formatCurrency(customer.balance_owed)}</span>
+                        ? (
+                          <button onClick={() => navigate('/receivables', { state: { filterCustomerId: customer.id, filterCustomerName: customer.name } })}
+                            className="font-semibold text-red-600 hover:underline">
+                            {formatCurrency(customer.balance_owed)}
+                          </button>
+                        )
                         : <span className="text-green-600 text-xs">Cleared</span>}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -336,6 +345,10 @@ export default function Customers() {
                         <button onClick={() => navigate('/sales/new', { state: { customer } })}
                           className="text-xs text-blue-700 hover:text-blue-900 border border-blue-200 rounded px-2 py-1 flex items-center gap-1">
                           <ShoppingCart size={11} /> Sell
+                        </button>
+                        <button onClick={() => navigate('/sales/history', { state: { filterCustomerName: customer.name } })}
+                          className="text-xs text-indigo-700 hover:text-indigo-900 border border-indigo-200 rounded px-2 py-1 flex items-center gap-1">
+                          <History size={11} /> Sales
                         </button>
                         <button onClick={() => setAnalyticsCustomer(customer)}
                           className="text-xs text-green-700 hover:text-green-900 border border-green-200 rounded px-2 py-1 flex items-center gap-1">

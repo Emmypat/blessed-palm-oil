@@ -6,7 +6,7 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {
-      const stored = localStorage.getItem('ct_user')
+      const stored = localStorage.getItem('bpo_user')
       return stored ? JSON.parse(stored) : null
     } catch {
       return null
@@ -21,9 +21,9 @@ export function AuthProvider({ children }) {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
     const { access_token, username: uname, must_change_password } = res.data
-    localStorage.setItem('ct_token', access_token)
+    localStorage.setItem('bpo_token', access_token)
     const userData = { username: uname, must_change_password }
-    localStorage.setItem('ct_user', JSON.stringify(userData))
+    localStorage.setItem('bpo_user', JSON.stringify(userData))
     setUser(userData)
     return userData
   }, [])
@@ -31,13 +31,13 @@ export function AuthProvider({ children }) {
   const changePassword = useCallback(async (newPassword) => {
     await api.post('/auth/change-password', { new_password: newPassword })
     const updated = { ...user, must_change_password: false }
-    localStorage.setItem('ct_user', JSON.stringify(updated))
+    localStorage.setItem('bpo_user', JSON.stringify(updated))
     setUser(updated)
   }, [user])
 
   const logout = useCallback(() => {
-    localStorage.removeItem('ct_token')
-    localStorage.removeItem('ct_user')
+    localStorage.removeItem('bpo_token')
+    localStorage.removeItem('bpo_user')
     setUser(null)
   }, [])
 

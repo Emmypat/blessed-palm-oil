@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Optional
 from sqlalchemy import String, Numeric, Integer, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base
@@ -20,6 +21,10 @@ class Sale(Base):
     declined: Mapped[bool] = mapped_column(Boolean, default=False)
     created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     verified_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    void_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    void_requested_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    is_voided: Mapped[bool] = mapped_column(Boolean, default=False)
+    void_approved_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     customer: Mapped["Customer | None"] = relationship("Customer", back_populates="sales")

@@ -1,3 +1,7 @@
+import os
+if os.getenv("ENVIRONMENT", "development") == "production" and not os.getenv("JWT_SECRET_KEY"):
+    raise RuntimeError("JWT_SECRET_KEY environment variable must be set in production")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
@@ -38,6 +42,18 @@ with engine.begin() as _conn:
     if "reminder_sent_at" not in _recv_cols:
         _conn.execute(text("ALTER TABLE receivables ADD COLUMN reminder_sent_at TIMESTAMP"))
 
+_sales_cols = {col["name"] for col in inspect(engine).get_columns("sales")}
+_sales_migrations = [
+    ("void_requested", "BOOLEAN DEFAULT FALSE"),
+    ("void_requested_by", "VARCHAR(100)"),
+    ("is_voided", "BOOLEAN DEFAULT FALSE"),
+    ("void_approved_by", "VARCHAR(100)"),
+]
+with engine.begin() as _conn:
+    for _col, _col_def in _sales_migrations:
+        if _col not in _sales_cols:
+            _conn.execute(text(f"ALTER TABLE sales ADD COLUMN {_col} {_col_def}"))
+
 
 def _seed_users():
     from app.utils.auth import hash_password
@@ -70,7 +86,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://d3erw0uu4uv0oh.cloudfront.net",
+        "http://localhost:5173",   # local dev only
+        "http://localhost:4173",   # vite preview
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -33,9 +33,16 @@ def change_password(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if len(data.new_password) < 8:
-        raise HTTPException(400, "Password must be at least 8 characters")
-    if data.new_password == "Password123":
+    import re
+
+    new_pw = data.new_password
+    if len(new_pw) < 10:
+        raise HTTPException(400, "Password must be at least 10 characters")
+    if not re.search(r'[A-Z]', new_pw):
+        raise HTTPException(400, "Password must contain at least one uppercase letter")
+    if not re.search(r'[0-9]', new_pw):
+        raise HTTPException(400, "Password must contain at least one number")
+    if new_pw == "Password123":
         raise HTTPException(400, "Please choose a different password")
     current_user.hashed_password = hash_password(data.new_password)
     current_user.must_change_password = False

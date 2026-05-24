@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: CementTrack API - Lambda + API Gateway (eu-west-1)
+Description: BlessedPalmOil API - Lambda + API Gateway (eu-west-1)
 
 Globals:
   Function:
@@ -29,7 +29,7 @@ Parameters:
     Description: RDS PostgreSQL endpoint
   DBName:
     Type: String
-    Default: cementtrack
+    Default: blessedpalmoil
   DBUsername:
     Type: String
     Default: cementadmin
@@ -61,7 +61,7 @@ Resources:
   ReceiptsBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "cementtrack-receipts-${AWS::AccountId}"
+      BucketName: !Sub "blessedpalmoil-receipts-${AWS::AccountId}"
       LifecycleConfiguration:
         Rules:
           - Id: ExpireOldReceipts
@@ -72,7 +72,7 @@ Resources:
   ReceiptTopic:
     Type: AWS::SNS::Topic
     Properties:
-      TopicName: cementtrack-receipts
+      TopicName: blessedpalmoil-receipts
 
   # SNS VPC endpoint so Lambda (in VPC) can publish to SNS
   SnsVpcEndpoint:
@@ -86,12 +86,12 @@ Resources:
       PrivateDnsEnabled: true
 
   # Lambda function
-  CementTrackFunction:
+  BlessedPalmOilFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: .
       Handler: app.main.handler
-      Description: CementTrack FastAPI backend
+      Description: BlessedPalmOil FastAPI backend
       VpcConfig:
         SubnetIds: !Ref VpcSubnetIds
         SecurityGroupIds: !Ref VpcSecurityGroupIds
@@ -107,7 +107,7 @@ Resources:
               Action:
                 - s3:PutObject
                 - s3:GetObject
-              Resource: !Sub "arn:aws:s3:::cementtrack-receipts-${AWS::AccountId}/*"
+              Resource: !Sub "arn:aws:s3:::blessedpalmoil-receipts-${AWS::AccountId}/*"
             - Effect: Allow
               Action:
                 - sns:Publish
@@ -118,20 +118,20 @@ Resources:
           Properties:
             Path: /
             Method: ANY
-            RestApiId: !Ref CementTrackApi
+            RestApiId: !Ref BlessedPalmOilApi
         ApiProxy:
           Type: Api
           Properties:
             Path: /{proxy+}
             Method: ANY
-            RestApiId: !Ref CementTrackApi
+            RestApiId: !Ref BlessedPalmOilApi
         ReceiptSns:
           Type: SNS
           Properties:
             Topic: !Ref ReceiptTopic
 
   # API Gateway
-  CementTrackApi:
+  BlessedPalmOilApi:
     Type: AWS::Serverless::Api
     Properties:
       StageName: prod
@@ -143,7 +143,7 @@ Resources:
 Outputs:
   ApiUrl:
     Description: API Gateway endpoint URL
-    Value: !Sub "https://${CementTrackApi}.execute-api.eu-west-1.amazonaws.com/prod"
+    Value: !Sub "https://${BlessedPalmOilApi}.execute-api.eu-west-1.amazonaws.com/prod"
   ReceiptsBucketName:
     Description: S3 bucket for receipt PDFs
     Value: !Ref ReceiptsBucket

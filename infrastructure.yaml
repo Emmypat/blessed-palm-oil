@@ -77,7 +77,8 @@ Resources:
       MasterUserPassword: !Ref DBPassword
       DBName: blessedpalmoil
       AllocatedStorage: '20'
-      StorageType: gp2
+      StorageType: gp3
+      StorageEncrypted: true
       MultiAZ: false
       PubliclyAccessible: false
       DBSubnetGroupName: !Ref RdsSubnetGroup
@@ -170,6 +171,10 @@ Resources:
           DATABASE_URL: !Sub
             - "postgresql+pg8000://palmoiladmin:${DBPassword}@${DBHost}/blessedpalmoil"
             - DBHost: !GetAtt RdsInstance.Endpoint.Address
+          # IMPORTANT: Create this secret in AWS Secrets Manager before deploying:
+          # aws secretsmanager create-secret --name blessedpalmoil/jwt-secret \
+          #   --secret-string '{"key":"<generate-a-random-64-char-string>"}' --region eu-west-1
+          JWT_SECRET_KEY: !Sub '{{resolve:secretsmanager:blessedpalmoil/jwt-secret:SecretString:key}}'
       Tags:
         - Key: Project
           Value: BlessedPalmOil
@@ -248,6 +253,10 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: blessedpalmoil-receipts-106083617032
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
       LifecycleConfiguration:
         Rules:
           - Id: ExpireOldReceipts
@@ -286,6 +295,25 @@ Resources:
         SigningBehavior: always
         SigningProtocol: sigv4
 
+  SecurityHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: blessedpalmoil-security-headers
+        SecurityHeadersConfig:
+          StrictTransportSecurity:
+            AccessControlMaxAgeSec: 31536000
+            IncludeSubdomains: true
+            Override: true
+          XContentTypeOptions:
+            Override: true
+          XFrameOptions:
+            FrameOption: DENY
+            Override: true
+          ReferrerPolicy:
+            ReferrerPolicy: strict-origin-when-cross-origin
+            Override: true
+
   # ── CloudFront Distribution ────────────────────────────────────────
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
@@ -310,6 +338,7 @@ Resources:
           ViewerProtocolPolicy: redirect-to-https
           CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
           Compress: true
+          ResponseHeadersPolicyId: !Ref SecurityHeadersPolicy
         CacheBehaviors:
           - PathPattern: /auth*
             TargetOriginId: ApiGateway
@@ -388,6 +417,54 @@ Resources:
       Tags:
         - Key: Project
           Value: BlessedPalmOil
+
+  LambdaErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: blessedpalmoil-lambda-errors
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref PalmOilFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  ApiGateway5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: blessedpalmoil-api-5xx
+      Namespace: AWS/ApiGateway
+      MetricName: 5XXError
+      Dimensions:
+        - Name: ApiName
+          Value: blessedpalmoil-api
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  RdsStorageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: blessedpalmoil-rds-storage-low
+      Namespace: AWS/RDS
+      MetricName: FreeStorageSpace
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: blessedpalmoil-db
+      Statistic: Average
+      Period: 3600
+      EvaluationPeriods: 1
+      Threshold: 2000000000   # 2 GB
+      ComparisonOperator: LessThanOrEqualToThreshold
+      TreatMissingData: notBreaching
 
 Outputs:
   ApiUrl:

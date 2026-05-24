@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useLocation, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, CheckCircle, XCircle, Eye, Receipt, Clock, Trash2, CalendarClock } from 'lucide-react'
+import { Search, CheckCircle, XCircle, Eye, Receipt, Clock, Trash2, CalendarClock, Ban } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { salesApi, receiptsApi, deletionsApi } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -17,15 +18,29 @@ const STATUS_FILTERS = [
   { key: 'pending', label: 'Pending' },
   { key: 'verified',label: 'Verified' },
   { key: 'declined',label: 'Declined' },
+  { key: 'voided',  label: 'Voided' },
 ]
 
 function statusOf(sale) {
+  if (sale.is_voided) return 'voided'
   if (sale.declined) return 'declined'
   if (sale.verified) return 'verified'
   return 'pending'
 }
 
 function StatusBadge({ sale }) {
+  if (sale.is_voided)
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-white bg-red-600 px-2 py-1 rounded-full">
+        <Ban size={11} /> VOIDED
+      </span>
+    )
+  if (sale.void_requested)
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-100 px-2 py-1 rounded-full">
+        <Clock size={11} /> Void Pending
+      </span>
+    )
   if (sale.verified)
     return (
       <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-1 rounded-full">
@@ -46,6 +61,7 @@ function StatusBadge({ sale }) {
 }
 
 function SaleDetailModal({ sale, onClose }) {
+  const navigate = useNavigate()
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
       <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto">
@@ -58,7 +74,19 @@ function SaleDetailModal({ sale, onClose }) {
         </div>
         <div className="px-5 py-4 space-y-4">
           <div className="grid grid-cols-2 gap-3 text-sm">
-            <div><span className="text-slate-500">Customer:</span> <span className="font-medium">{sale.customer_name || 'Walk-in'}</span></div>
+            <div>
+              <span className="text-slate-500">Customer:</span>{' '}
+              {sale.customer_id ? (
+                <button
+                  onClick={() => { onClose(); navigate('/customers') }}
+                  className="font-medium text-green-700 hover:underline"
+                >
+                  {sale.customer_name || 'Walk-in'}
+                </button>
+              ) : (
+                <span className="font-medium">{sale.customer_name || 'Walk-in'}</span>
+              )}
+            </div>
             <div><span className="text-slate-500">Date:</span> <span className="font-medium">{formatDateTime(sale.created_at)}</span></div>
             <div>
               <span className="text-slate-500">Payment:</span>
@@ -84,6 +112,12 @@ function SaleDetailModal({ sale, onClose }) {
             )}
             {sale.verified_by && (
               <div><span className="text-slate-500">Verified by:</span> <span className="font-medium text-green-700">{sale.verified_by}</span></div>
+            )}
+            {sale.void_requested_by && !sale.is_voided && (
+              <div className="col-span-2"><span className="text-slate-500">Void requested by:</span> <span className="font-medium text-amber-700">{sale.void_requested_by}</span></div>
+            )}
+            {sale.void_approved_by && (
+              <div className="col-span-2"><span className="text-slate-500">Voided by:</span> <span className="font-medium text-red-700">{sale.void_approved_by}</span></div>
             )}
           </div>
           {sale.items?.length > 0 && (
@@ -123,9 +157,20 @@ function SaleDetailModal({ sale, onClose }) {
 export default function SalesHistory() {
   const qc = useQueryClient()
   const { user } = useAuth()
+  const location = useLocation()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [viewSale, setViewSale] = useState(null)
+
+  // Pre-apply filters from navigation state (e.g. from Customer "View Sales" button)
+  useEffect(() => {
+    if (location.state?.filterCustomerName) {
+      setSearch(location.state.filterCustomerName)
+    }
+    if (location.state?.searchSaleId) {
+      setSearch(String(location.state.searchSaleId))
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: sales = [] } = useQuery({
     queryKey: ['sales'],
@@ -174,12 +219,24 @@ export default function SalesHistory() {
     onError: (e) => toast.error(e.message),
   })
 
-  // Counts per status for the tab badges
+  const requestVoidMutation = useMutation({
+    mutationFn: salesApi.requestVoid,
+    onSuccess: () => { qc.invalidateQueries(['sales']); toast.success('Void request submitted — awaiting second-user approval') },
+    onError: (e) => toast.error(e.message),
+  })
+
+  const approveVoidMutation = useMutation({
+    mutationFn: salesApi.approveVoid,
+    onSuccess: () => { qc.invalidateQueries(['sales']); toast.success('Sale voided') },
+    onError: (e) => toast.error(e.message),
+  })
+
   const counts = {
     all: sales.length,
     pending:  sales.filter(s => statusOf(s) === 'pending').length,
     verified: sales.filter(s => statusOf(s) === 'verified').length,
     declined: sales.filter(s => statusOf(s) === 'declined').length,
+    voided:   sales.filter(s => statusOf(s) === 'voided').length,
   }
 
   const filtered = sales.filter(s => {
@@ -191,10 +248,9 @@ export default function SalesHistory() {
   })
 
   const filteredTotal = filtered.reduce((sum, s) => sum + Number(s.total || 0), 0)
-
   const dayGroups = groupByDay(filtered, 'created_at')
+  const pendingDeleteIds = new Set(pendingDeletions.map(d => d.entity_id))
 
-  // Shared card actions
   const SaleActions = ({ sale, mobile }) => {
     const btnBase = mobile
       ? 'flex-1 py-3 text-sm font-medium rounded-xl flex items-center justify-center gap-1.5 active:scale-[0.97]'
@@ -202,7 +258,8 @@ export default function SalesHistory() {
 
     return (
       <>
-        {!sale.verified && !sale.declined && (
+        {/* Verify / Decline (non-voided, non-declined sales) */}
+        {!sale.verified && !sale.declined && !sale.is_voided && !sale.void_requested && (
           sale.created_by === user?.username ? (
             <div className={mobile ? 'flex-1 py-2 text-xs text-center text-slate-400 bg-slate-50 rounded-lg' : 'text-xs text-slate-400 italic'}>
               Awaiting 2nd user
@@ -220,6 +277,28 @@ export default function SalesHistory() {
             </>
           )
         )}
+
+        {/* Void controls */}
+        {!sale.is_voided && !sale.declined && (
+          sale.void_requested ? (
+            sale.void_requested_by === user?.username ? (
+              <span className={`${btnBase} text-amber-600 border border-amber-200 bg-amber-50 cursor-default`}>
+                <Clock size={mobile ? 14 : 12} /> Void Pending
+              </span>
+            ) : (
+              <button onClick={() => approveVoidMutation.mutate(sale.id)} disabled={approveVoidMutation.isPending}
+                className={`${btnBase} text-white bg-amber-500 ${mobile ? '' : 'hover:bg-amber-600'} disabled:opacity-50`}>
+                <Ban size={mobile ? 14 : 12} /> Approve Void
+              </button>
+            )
+          ) : (
+            <button onClick={() => requestVoidMutation.mutate(sale.id)} disabled={requestVoidMutation.isPending}
+              className={`${btnBase} text-slate-500 border border-slate-200 ${mobile ? '' : 'hover:text-slate-700'} disabled:opacity-50`}>
+              <Ban size={mobile ? 14 : 12} /> Void
+            </button>
+          )
+        )}
+
         <button onClick={() => setViewSale(sale)}
           className={`${btnBase} text-slate-600 border border-slate-200 ${mobile ? '' : 'hover:text-slate-800'}`}>
           <Eye size={mobile ? 14 : 12} /> Details
@@ -245,8 +324,6 @@ export default function SalesHistory() {
       </>
     )
   }
-
-  const pendingDeleteIds = new Set(pendingDeletions.map(d => d.entity_id))
 
   return (
     <div className="space-y-3">
@@ -307,6 +384,7 @@ export default function SalesHistory() {
                 ? key === 'pending'  ? 'bg-amber-500 text-white'
                 : key === 'verified' ? 'bg-green-500 text-white'
                 : key === 'declined' ? 'bg-red-500 text-white'
+                : key === 'voided'   ? 'bg-red-700 text-white'
                 : 'bg-green-600 text-white'
                 : 'bg-white border border-slate-200 text-slate-600'
             }`}
@@ -351,15 +429,20 @@ export default function SalesHistory() {
             <div className="space-y-2">
               {daySales.map(sale => (
                 <div key={sale.id} className={`bg-white rounded-xl border p-4 ${
+                  sale.is_voided ? 'border-red-200 opacity-60' :
                   sale.declined ? 'border-red-100' : sale.verified ? 'border-green-100' : 'border-slate-200'
                 }`}>
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <p className="font-semibold text-slate-800">{sale.customer_name || 'Walk-in'}</p>
+                      <p className={`font-semibold ${sale.is_voided ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                        {sale.customer_name || 'Walk-in'}
+                      </p>
                       <p className="text-xs text-slate-400 mt-0.5">{formatDateTime(sale.created_at)}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-slate-800">{formatCurrency(sale.total)}</p>
+                      <p className={`font-bold ${sale.is_voided ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                        {formatCurrency(sale.total)}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap mb-3">
@@ -375,7 +458,7 @@ export default function SalesHistory() {
                       {sale.verified_by && <> · verified by <strong className="text-green-700">{sale.verified_by}</strong></>}
                     </p>
                   )}
-                  <div className="flex gap-2 pt-3 border-t border-slate-100">
+                  <div className="flex gap-2 pt-3 border-t border-slate-100 flex-wrap">
                     <SaleActions sale={sale} mobile />
                   </div>
                 </div>
@@ -410,10 +493,12 @@ export default function SalesHistory() {
                     </td>
                   </tr>
                   {daySales.map(sale => (
-                    <tr key={sale.id} className={`hover:bg-slate-50 ${sale.declined ? 'bg-red-50/30' : ''}`}>
+                    <tr key={sale.id} className={`hover:bg-slate-50 ${sale.is_voided ? 'opacity-50' : sale.declined ? 'bg-red-50/30' : ''}`}>
                       <td className="px-4 py-3 text-slate-400 font-mono">#{sale.id}</td>
                       <td className="px-4 py-3">
-                        <p className="font-medium text-slate-800">{sale.customer_name || 'Walk-in'}</p>
+                        <p className={`font-medium ${sale.is_voided ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                          {sale.customer_name || 'Walk-in'}
+                        </p>
                         <p className="text-xs text-slate-400">
                           {sale.created_by && <>by {sale.created_by}</>}
                           {sale.verified_by && <span className="text-green-600"> · ✓ {sale.verified_by}</span>}
@@ -426,10 +511,12 @@ export default function SalesHistory() {
                           {sale.payment_method?.replace('_', ' ')}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right font-semibold text-slate-800">{formatCurrency(sale.total)}</td>
+                      <td className={`px-4 py-3 text-right font-semibold ${sale.is_voided ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                        {formatCurrency(sale.total)}
+                      </td>
                       <td className="px-4 py-3 text-center"><StatusBadge sale={sale} /></td>
                       <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex items-center justify-end gap-1 flex-wrap">
                           <SaleActions sale={sale} mobile={false} />
                         </div>
                       </td>

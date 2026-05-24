@@ -10,6 +10,7 @@ class ReceivableOut(BaseModel):
     sale_id: int
     customer_name: str | None
     customer_email: str | None
+    customer_phone: str | None = None
     amount_owed: float
     amount_paid: float
     due_date: date | None

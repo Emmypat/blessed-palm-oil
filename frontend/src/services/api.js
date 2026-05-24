@@ -8,7 +8,7 @@ const api = axios.create({
 })
 
 api.interceptors.request.use(config => {
-  const token = localStorage.getItem('ct_token')
+  const token = localStorage.getItem('bpo_token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -19,8 +19,8 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401) {
-      localStorage.removeItem('ct_token')
-      localStorage.removeItem('ct_user')
+      localStorage.removeItem('bpo_token')
+      localStorage.removeItem('bpo_user')
       window.location.href = '/login'
       return Promise.reject(new Error('Session expired'))
     }
@@ -63,11 +63,13 @@ export const salesApi = {
   create: (data) => api.post('/sales', data),
   verify: (id) => api.post(`/sales/${id}/verify`),
   decline: (id) => api.post(`/sales/${id}/decline`),
+  requestVoid: (id) => api.post(`/sales/${id}/void-request`),
+  approveVoid: (id) => api.post(`/sales/${id}/void-approve`),
 }
 
 // Receivables
 export const receivablesApi = {
-  getAll: (params) => api.get('/receivables', { params }),
+  getAll: (params) => api.get('/receivables', { params: params || {} }),
   getOne: (id) => api.get(`/receivables/${id}`),
   requestPayment: (id, data) => api.post(`/receivables/${id}/request-payment`, data),
   getPendingPayments: () => api.get('/receivables/pending-payments'),

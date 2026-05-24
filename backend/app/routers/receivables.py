@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.db import get_db
 from app.models.receivable import Receivable
 from app.models.customer import Customer
@@ -27,9 +27,33 @@ class PendingPaymentOut(BaseModel):
     created_at: datetime
 
 
+def _enrich_receivable(r: Receivable) -> dict:
+    phone = r.customer.phone if r.customer else None
+    return {
+        "id": r.id,
+        "customer_id": r.customer_id,
+        "sale_id": r.sale_id,
+        "customer_name": r.customer_name,
+        "customer_email": r.customer_email,
+        "customer_phone": phone,
+        "amount_owed": float(r.amount_owed),
+        "amount_paid": float(r.amount_paid),
+        "due_date": r.due_date,
+        "paid": r.paid,
+        "paid_date": r.paid_date,
+        "created_at": r.created_at,
+    }
+
+
 @router.get("", response_model=list[ReceivableOut])
-def get_all(db: Session = Depends(get_db)):
-    return db.query(Receivable).order_by(Receivable.created_at.desc()).all()
+def get_all(
+    customer_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    q = db.query(Receivable).options(joinedload(Receivable.customer))
+    if customer_id is not None:
+        q = q.filter(Receivable.customer_id == customer_id)
+    return [_enrich_receivable(r) for r in q.order_by(Receivable.created_at.desc()).all()]
 
 
 @router.get("/pending-payments", response_model=list[PendingPaymentOut])
@@ -42,10 +66,10 @@ def get_pending_payments(
 
 @router.get("/{receivable_id}", response_model=ReceivableOut)
 def get_one(receivable_id: int, db: Session = Depends(get_db)):
-    rec = db.get(Receivable, receivable_id)
+    rec = db.query(Receivable).options(joinedload(Receivable.customer)).filter(Receivable.id == receivable_id).first()
     if not rec:
         raise HTTPException(404, "Receivable not found")
-    return rec
+    return _enrich_receivable(rec)
 
 
 @router.post("/{receivable_id}/request-payment", response_model=PendingPaymentOut, status_code=201)

@@ -45,9 +45,13 @@ def _sale_to_out(sale: Sale) -> dict:
         is_credit=sale.is_credit,
         due_date=sale.receivable.due_date if sale.receivable else None,
         verified=sale.verified,
-        declined=sale.declined if hasattr(sale, 'declined') else False,
-        created_by=sale.created_by if hasattr(sale, 'created_by') else None,
-        verified_by=sale.verified_by if hasattr(sale, 'verified_by') else None,
+        declined=getattr(sale, 'declined', False),
+        created_by=getattr(sale, 'created_by', None),
+        verified_by=getattr(sale, 'verified_by', None),
+        void_requested=getattr(sale, 'void_requested', False),
+        void_requested_by=getattr(sale, 'void_requested_by', None),
+        is_voided=getattr(sale, 'is_voided', False),
+        void_approved_by=getattr(sale, 'void_approved_by', None),
         created_at=sale.created_at,
         items=items,
     )
@@ -234,6 +238,43 @@ def verify_sale(sale_id: int, current_user: User = Depends(get_current_user), db
     sale.verified_by = current_user.username
     db.commit()
     return _sale_to_out(_load_sale(sale_id, db))
+
+
+@router.post("/{sale_id}/void-request")
+def request_void_sale(
+    sale_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    sale = db.query(Sale).filter(Sale.id == sale_id).first()
+    if not sale:
+        raise HTTPException(404, "Sale not found")
+    if sale.void_requested:
+        raise HTTPException(400, "Void already pending approval")
+    sale.void_requested = True
+    sale.void_requested_by = current_user.username
+    db.commit()
+    return {"ok": True, "message": "Void request submitted — awaiting second-user approval"}
+
+
+@router.post("/{sale_id}/void-approve")
+def approve_void_sale(
+    sale_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    sale = db.query(Sale).filter(Sale.id == sale_id).first()
+    if not sale:
+        raise HTTPException(404, "Sale not found")
+    if not sale.void_requested:
+        raise HTTPException(400, "No void request pending")
+    if sale.void_requested_by == current_user.username:
+        raise HTTPException(403, "You cannot approve your own void request")
+    sale.is_voided = True
+    sale.void_approved_by = current_user.username
+    sale.void_requested = False
+    db.commit()
+    return {"ok": True, "message": "Sale voided successfully"}
 
 
 @router.post("/{sale_id}/decline", response_model=SaleOut)

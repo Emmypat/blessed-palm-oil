@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { Search, Mail, Download, FileText } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Search, Mail, Download, FileText, ExternalLink } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { receiptsApi } from '../services/api'
 import { formatCurrency, formatDateTime, groupByMonth } from '../utils/format'
@@ -11,6 +12,7 @@ const MOCK_RECEIPTS = [
 ]
 
 export default function Receipts() {
+  const navigate = useNavigate()
   const [search, setSearch] = useState('')
 
   const { data: receipts = MOCK_RECEIPTS } = useQuery({
@@ -67,7 +69,15 @@ export default function Receipts() {
             <div className="flex items-start justify-between mb-2">
               <div>
                 <p className="font-semibold text-slate-800">{receipt.customer_name || 'Walk-in'}</p>
-                <p className="text-xs text-slate-400 mt-0.5">Sale #{receipt.sale_id} · Receipt #{receipt.id}</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-xs text-slate-400">Receipt #{receipt.id}</span>
+                  <button
+                    onClick={() => navigate('/sales/history', { state: { searchSaleId: receipt.sale_id } })}
+                    className="text-xs text-indigo-600 hover:underline flex items-center gap-0.5"
+                  >
+                    Sale #{receipt.sale_id} <ExternalLink size={10} />
+                  </button>
+                </div>
               </div>
               <span className="font-bold text-slate-800">{formatCurrency(receipt.total)}</span>
             </div>
@@ -123,8 +133,14 @@ export default function Receipts() {
                   </tr>
                   {items.map(receipt => (
                 <tr key={receipt.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-mono text-slate-500">
-                    #{receipt.id} <span className="text-xs text-slate-400">(Sale #{receipt.sale_id})</span>
+                  <td className="px-4 py-3">
+                    <span className="font-mono text-slate-500">#{receipt.id}</span>
+                    <button
+                      onClick={() => navigate('/sales/history', { state: { searchSaleId: receipt.sale_id } })}
+                      className="ml-1.5 text-xs text-indigo-600 hover:underline inline-flex items-center gap-0.5"
+                    >
+                      Sale #{receipt.sale_id} <ExternalLink size={10} />
+                    </button>
                   </td>
                   <td className="px-4 py-3 font-medium text-slate-800">{receipt.customer_name || 'Walk-in'}</td>
                   <td className="px-4 py-3 text-slate-500">

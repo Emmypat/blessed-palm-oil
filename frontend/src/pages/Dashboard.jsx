@@ -4,9 +4,12 @@ import { Package, ShoppingCart, CreditCard, TrendingUp, AlertTriangle, Clock, Be
 import { dashboardApi } from '../services/api'
 import { formatCurrency, formatDate } from '../utils/format'
 
-function StatCard({ icon: Icon, label, value, sub, color }) {
+function StatCard({ icon: Icon, label, value, sub, color, onClick }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5 flex items-start gap-4">
+    <div
+      onClick={onClick}
+      className={`bg-white rounded-xl border border-slate-200 p-5 flex items-start gap-4 ${onClick ? 'cursor-pointer hover:border-slate-300 hover:shadow-sm transition-shadow' : ''}`}
+    >
       <div className={`p-2.5 rounded-lg ${color}`}>
         <Icon size={20} className="text-white" />
       </div>
@@ -53,6 +56,7 @@ export default function Dashboard() {
           value={summary.total_products ?? '—'}
           sub={summary.low_stock_count ? `${summary.low_stock_count} low stock` : 'All stocked'}
           color="bg-blue-500"
+          onClick={() => navigate('/inventory')}
         />
         <StatCard
           icon={ShoppingCart}
@@ -60,6 +64,7 @@ export default function Dashboard() {
           value={summary.today_sales ?? '—'}
           sub={formatCurrency(summary.today_revenue ?? 0)}
           color="bg-green-600"
+          onClick={() => navigate('/sales/history')}
         />
         <StatCard
           icon={CreditCard}
@@ -67,6 +72,7 @@ export default function Dashboard() {
           value={formatCurrency(summary.total_receivables ?? 0)}
           sub={`${summary.overdue_count ?? 0} overdue`}
           color="bg-red-500"
+          onClick={() => navigate('/receivables')}
         />
         <StatCard
           icon={TrendingUp}
@@ -74,6 +80,7 @@ export default function Dashboard() {
           value={formatCurrency(summary.today_revenue ?? 0)}
           sub="cash + card + mobile"
           color="bg-purple-500"
+          onClick={() => navigate('/sales/history')}
         />
       </div>
 

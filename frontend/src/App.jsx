@@ -23,7 +23,7 @@ function ChangePasswordModal() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
-    if (password.length < 8) { setError('Password must be at least 8 characters'); return }
+    if (password.length < 10) { setError('Password must be at least 10 characters'); return }
     if (password !== confirm) { setError('Passwords do not match'); return }
     setLoading(true)
     try {
@@ -58,7 +58,7 @@ function ChangePasswordModal() {
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="At least 8 characters"
+              placeholder="At least 10 characters"
               required
               autoFocus
               className="w-full border border-slate-300 rounded-xl px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
