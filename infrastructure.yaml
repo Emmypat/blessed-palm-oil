@@ -78,7 +78,7 @@ Resources:
       DBName: blessedpalmoil
       AllocatedStorage: '20'
       StorageType: gp3
-      StorageEncrypted: true
+      # StorageEncrypted: true  -- requires DB replacement; enable by restoring from an encrypted snapshot
       MultiAZ: false
       PubliclyAccessible: false
       DBSubnetGroupName: !Ref RdsSubnetGroup
@@ -174,7 +174,7 @@ Resources:
           # IMPORTANT: Create this secret in AWS Secrets Manager before deploying:
           # aws secretsmanager create-secret --name blessedpalmoil/jwt-secret \
           #   --secret-string '{"key":"<generate-a-random-64-char-string>"}' --region eu-west-1
-          JWT_SECRET_KEY: !Sub '{{resolve:secretsmanager:blessedpalmoil/jwt-secret:SecretString:key}}'
+          JWT_SECRET_KEY: '{{resolve:secretsmanager:blessedpalmoil/jwt-secret:SecretString:key}}'
       Tags:
         - Key: Project
           Value: BlessedPalmOil
@@ -305,9 +305,9 @@ Resources:
             AccessControlMaxAgeSec: 31536000
             IncludeSubdomains: true
             Override: true
-          XContentTypeOptions:
+          ContentTypeOptions:
             Override: true
-          XFrameOptions:
+          FrameOptions:
             FrameOption: DENY
             Override: true
           ReferrerPolicy:
