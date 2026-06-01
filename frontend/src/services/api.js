@@ -65,6 +65,8 @@ export const salesApi = {
   decline: (id) => api.post(`/sales/${id}/decline`),
   requestVoid: (id) => api.post(`/sales/${id}/void-request`),
   approveVoid: (id) => api.post(`/sales/${id}/void-approve`),
+  requestUnvoid: (id) => api.post(`/sales/${id}/unvoid-request`),
+  approveUnvoid: (id) => api.post(`/sales/${id}/unvoid-approve`),
 }
 
 // Receivables

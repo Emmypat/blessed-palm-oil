@@ -25,6 +25,8 @@ class Sale(Base):
     void_requested_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_voided: Mapped[bool] = mapped_column(Boolean, default=False)
     void_approved_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    unvoid_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    unvoid_requested_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     customer: Mapped["Customer | None"] = relationship("Customer", back_populates="sales")

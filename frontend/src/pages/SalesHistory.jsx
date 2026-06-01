@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useLocation, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, CheckCircle, XCircle, Eye, Receipt, Clock, Trash2, CalendarClock, Ban } from 'lucide-react'
+import { Search, CheckCircle, XCircle, Eye, Receipt, Clock, Trash2, CalendarClock, Ban, MoreHorizontal, RotateCcw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { salesApi, receiptsApi, deletionsApi } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -170,6 +170,7 @@ export default function SalesHistory() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [viewSale, setViewSale] = useState(null)
   const [customerMenu, setCustomerMenu] = useState(null)
+  const [expandedActions, setExpandedActions] = useState(null)
 
   // Pre-apply filters from navigation state (e.g. from Customer "View Sales" button)
   useEffect(() => {
@@ -240,6 +241,18 @@ export default function SalesHistory() {
     onError: (e) => toast.error(e.message),
   })
 
+  const requestUnvoidMutation = useMutation({
+    mutationFn: salesApi.requestUnvoid,
+    onSuccess: () => { qc.invalidateQueries(['sales']); toast.success('Unvoid request submitted — awaiting second-user approval') },
+    onError: (e) => toast.error(e.message),
+  })
+
+  const approveUnvoidMutation = useMutation({
+    mutationFn: salesApi.approveUnvoid,
+    onSuccess: () => { qc.invalidateQueries(['sales']); toast.success('Sale restored — void reversed') },
+    onError: (e) => toast.error(e.message),
+  })
+
   const counts = {
     all: sales.length,
     pending:  sales.filter(s => statusOf(s) === 'pending').length,
@@ -261,6 +274,31 @@ export default function SalesHistory() {
   const pendingDeleteIds = new Set(pendingDeletions.map(d => d.entity_id))
 
   const SaleActions = ({ sale, mobile }) => {
+    if (sale.is_voided) return (
+      <>
+        {sale.unvoid_requested ? (
+          sale.unvoid_requested_by === user?.username ? (
+            <span className={`${mobile ? 'flex-1 py-3 text-sm font-medium rounded-xl flex items-center justify-center gap-1.5' : 'text-xs flex items-center gap-1 rounded px-2 py-1'} text-blue-600 border border-blue-200 bg-blue-50 cursor-default`}>
+              <RotateCcw size={mobile ? 14 : 12} /> Unvoid Pending
+            </span>
+          ) : (
+            <button onClick={() => approveUnvoidMutation.mutate(sale.id)} disabled={approveUnvoidMutation.isPending}
+              className={`${mobile ? 'flex-1 py-3 text-sm font-medium rounded-xl flex items-center justify-center gap-1.5 active:scale-[0.97]' : 'text-xs flex items-center gap-1 rounded px-2 py-1 hover:bg-blue-600'} text-white bg-blue-500 disabled:opacity-50`}>
+              <RotateCcw size={mobile ? 14 : 12} /> Approve Unvoid
+            </button>
+          )
+        ) : (
+          <button onClick={() => requestUnvoidMutation.mutate(sale.id)} disabled={requestUnvoidMutation.isPending}
+            className={`${mobile ? 'flex-1 py-3 text-sm font-medium rounded-xl flex items-center justify-center gap-1.5 active:scale-[0.97]' : 'text-xs flex items-center gap-1 rounded px-2 py-1'} text-blue-600 border border-blue-200 disabled:opacity-50`}>
+            <RotateCcw size={mobile ? 14 : 12} /> Reverse Void
+          </button>
+        )}
+        <button onClick={() => setViewSale(sale)}
+          className={`${mobile ? 'flex-1 py-3 text-sm font-medium rounded-xl flex items-center justify-center gap-1.5' : 'text-xs flex items-center gap-1 rounded px-2 py-1'} text-slate-600 border border-slate-200`}>
+          <Eye size={mobile ? 14 : 12} /> Details
+        </button>
+      </>
+    )
     const btnBase = mobile
       ? 'flex-1 py-3 text-sm font-medium rounded-xl flex items-center justify-center gap-1.5 active:scale-[0.97]'
       : 'text-xs flex items-center gap-1 rounded px-2 py-1'
@@ -476,8 +514,21 @@ export default function SalesHistory() {
                       {sale.verified_by && <> · verified by <strong className="text-green-700">{sale.verified_by}</strong></>}
                     </p>
                   )}
-                  <div className="flex gap-2 pt-3 border-t border-slate-100 flex-wrap">
-                    <SaleActions sale={sale} mobile />
+                  <div className="pt-3 border-t border-slate-100">
+                    {expandedActions === sale.id ? (
+                      <div className="flex gap-2 flex-wrap">
+                        <SaleActions sale={sale} mobile />
+                        <button onClick={() => setExpandedActions(null)}
+                          className="flex-1 py-3 text-sm font-medium text-slate-400 border border-slate-200 rounded-xl flex items-center justify-center">
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setExpandedActions(sale.id)}
+                        className="w-full py-2.5 text-sm font-medium text-slate-500 border border-slate-200 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98]">
+                        <MoreHorizontal size={15} /> Actions
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -543,9 +594,20 @@ export default function SalesHistory() {
                       </td>
                       <td className="px-4 py-3 text-center"><StatusBadge sale={sale} /></td>
                       <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1 flex-wrap">
-                          <SaleActions sale={sale} mobile={false} />
-                        </div>
+                        {expandedActions === sale.id ? (
+                          <div className="flex items-center justify-end gap-1 flex-wrap">
+                            <SaleActions sale={sale} mobile={false} />
+                            <button onClick={() => setExpandedActions(null)}
+                              className="text-xs text-slate-400 border border-slate-200 rounded px-2 py-1 hover:text-slate-600">
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setExpandedActions(sale.id)}
+                            className="text-xs flex items-center gap-1 text-slate-500 border border-slate-200 rounded px-2 py-1 hover:text-slate-700">
+                            <MoreHorizontal size={13} /> Actions
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

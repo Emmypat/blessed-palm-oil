@@ -48,6 +48,8 @@ _sales_migrations = [
     ("void_requested_by", "VARCHAR(100)"),
     ("is_voided", "BOOLEAN DEFAULT FALSE"),
     ("void_approved_by", "VARCHAR(100)"),
+    ("unvoid_requested", "BOOLEAN DEFAULT FALSE"),
+    ("unvoid_requested_by", "VARCHAR(100)"),
 ]
 with engine.begin() as _conn:
     for _col, _col_def in _sales_migrations:

@@ -52,6 +52,8 @@ def _sale_to_out(sale: Sale) -> dict:
         void_requested_by=getattr(sale, 'void_requested_by', None),
         is_voided=getattr(sale, 'is_voided', False),
         void_approved_by=getattr(sale, 'void_approved_by', None),
+        unvoid_requested=getattr(sale, 'unvoid_requested', False),
+        unvoid_requested_by=getattr(sale, 'unvoid_requested_by', None),
         created_at=sale.created_at,
         items=items,
     )
@@ -275,6 +277,47 @@ def approve_void_sale(
     sale.void_requested = False
     db.commit()
     return {"ok": True, "message": "Sale voided successfully"}
+
+
+@router.post("/{sale_id}/unvoid-request")
+def request_unvoid_sale(
+    sale_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    sale = db.query(Sale).filter(Sale.id == sale_id).first()
+    if not sale:
+        raise HTTPException(404, "Sale not found")
+    if not sale.is_voided:
+        raise HTTPException(400, "Sale is not voided")
+    if sale.unvoid_requested:
+        raise HTTPException(400, "Unvoid already requested")
+    sale.unvoid_requested = True
+    sale.unvoid_requested_by = current_user.username
+    db.commit()
+    return {"ok": True, "message": "Unvoid request submitted — awaiting second-user approval"}
+
+
+@router.post("/{sale_id}/unvoid-approve")
+def approve_unvoid_sale(
+    sale_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    sale = db.query(Sale).filter(Sale.id == sale_id).first()
+    if not sale:
+        raise HTTPException(404, "Sale not found")
+    if not sale.unvoid_requested:
+        raise HTTPException(400, "No unvoid request pending")
+    if sale.unvoid_requested_by == current_user.username:
+        raise HTTPException(403, "You cannot approve your own unvoid request")
+    sale.is_voided = False
+    sale.void_approved_by = None
+    sale.void_requested_by = None
+    sale.unvoid_requested = False
+    sale.unvoid_requested_by = None
+    db.commit()
+    return {"ok": True, "message": "Sale unvoided successfully"}
 
 
 @router.post("/{sale_id}/decline", response_model=SaleOut)

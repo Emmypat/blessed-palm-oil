@@ -65,5 +65,7 @@ class SaleOut(BaseModel):
     void_requested_by: str | None = None
     is_voided: bool = False
     void_approved_by: str | None = None
+    unvoid_requested: bool = False
+    unvoid_requested_by: str | None = None
     created_at: datetime
     items: list[SaleItemOut] = []
