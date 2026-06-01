@@ -9,6 +9,7 @@ import { receivablesApi } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency, formatDate, groupByMonth } from '../utils/format'
 import { openWhatsAppChat, waMessages } from '../utils/whatsapp'
+import CustomerActionMenu from '../components/CustomerActionMenu'
 
 function PaymentModal({ receivable, onClose, onRequest }) {
   const { register, handleSubmit, formState: { errors } } = useForm()
@@ -70,6 +71,7 @@ export default function Receivables() {
   const [search, setSearch] = useState('')
   const [requestReceivable, setRequestReceivable] = useState(null)
   const [filter, setFilter] = useState('unpaid')
+  const [customerMenu, setCustomerMenu] = useState(null)
 
   useEffect(() => {
     if (location.state?.filterCustomerName) {
@@ -221,7 +223,16 @@ export default function Receivables() {
                   <div className={`p-4 ${isOverdue ? 'border-l-4 border-red-400' : ''}`}>
                     <div className="flex items-start justify-between mb-2">
                       <div>
-                        <p className="font-semibold text-slate-800">{r.customer_name}</p>
+                        {r.customer_id ? (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setCustomerMenu({ id: r.customer_id, name: r.customer_name, rect: e.currentTarget.getBoundingClientRect() }) }}
+                            className="font-semibold text-green-700 hover:underline text-left"
+                          >
+                            {r.customer_name}
+                          </button>
+                        ) : (
+                          <p className="font-semibold text-slate-800">{r.customer_name}</p>
+                        )}
                         <button
                           onClick={() => navigate('/sales/history', { state: { searchSaleId: r.sale_id } })}
                           className="text-xs text-indigo-600 hover:underline mt-0.5">
@@ -294,7 +305,18 @@ export default function Receivables() {
                     const isPending = pendingReceivableIds.has(r.id)
                     return (
                       <tr key={r.id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-medium text-slate-800">{r.customer_name}</td>
+                        <td className="px-4 py-3">
+                          {r.customer_id ? (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setCustomerMenu({ id: r.customer_id, name: r.customer_name, rect: e.currentTarget.getBoundingClientRect() }) }}
+                              className="font-medium text-green-700 hover:underline text-left"
+                            >
+                              {r.customer_name}
+                            </button>
+                          ) : (
+                            <span className="font-medium text-slate-800">{r.customer_name}</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3">
                           <button
                             onClick={() => navigate('/sales/history', { state: { searchSaleId: r.sale_id } })}
@@ -346,6 +368,13 @@ export default function Receivables() {
         </div>
       </div>
 
+      {customerMenu && (
+        <CustomerActionMenu
+          customer={{ id: customerMenu.id, name: customerMenu.name }}
+          anchorRect={customerMenu.rect}
+          onClose={() => setCustomerMenu(null)}
+        />
+      )}
       {requestReceivable && (
         <PaymentModal
           receivable={requestReceivable}

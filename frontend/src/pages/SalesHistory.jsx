@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import { salesApi, receiptsApi, deletionsApi } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency, formatDateTime, groupByDay } from '../utils/format'
+import CustomerActionMenu from '../components/CustomerActionMenu'
 
 const METHOD_BADGE = {
   cash: 'bg-green-100 text-green-700',
@@ -61,7 +62,7 @@ function StatusBadge({ sale }) {
 }
 
 function SaleDetailModal({ sale, onClose }) {
-  const navigate = useNavigate()
+  const [customerMenu, setCustomerMenu] = useState(null)
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
       <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto">
@@ -72,13 +73,20 @@ function SaleDetailModal({ sale, onClose }) {
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1 text-xl font-bold">&times;</button>
         </div>
+        {customerMenu && (
+          <CustomerActionMenu
+            customer={{ id: customerMenu.id, name: customerMenu.name }}
+            anchorRect={customerMenu.rect}
+            onClose={() => setCustomerMenu(null)}
+          />
+        )}
         <div className="px-5 py-4 space-y-4">
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
               <span className="text-slate-500">Customer:</span>{' '}
               {sale.customer_id ? (
                 <button
-                  onClick={() => { onClose(); navigate('/customers') }}
+                  onClick={(e) => { e.stopPropagation(); setCustomerMenu({ id: sale.customer_id, name: sale.customer_name, rect: e.currentTarget.getBoundingClientRect() }) }}
                   className="font-medium text-green-700 hover:underline"
                 >
                   {sale.customer_name || 'Walk-in'}
@@ -161,6 +169,7 @@ export default function SalesHistory() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [viewSale, setViewSale] = useState(null)
+  const [customerMenu, setCustomerMenu] = useState(null)
 
   // Pre-apply filters from navigation state (e.g. from Customer "View Sales" button)
   useEffect(() => {
@@ -434,9 +443,18 @@ export default function SalesHistory() {
                 }`}>
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <p className={`font-semibold ${sale.is_voided ? 'line-through text-slate-400' : 'text-slate-800'}`}>
-                        {sale.customer_name || 'Walk-in'}
-                      </p>
+                      {sale.customer_id ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setCustomerMenu({ id: sale.customer_id, name: sale.customer_name, rect: e.currentTarget.getBoundingClientRect() }) }}
+                          className={`font-semibold text-left text-green-700 hover:underline ${sale.is_voided ? 'line-through' : ''}`}
+                        >
+                          {sale.customer_name || 'Walk-in'}
+                        </button>
+                      ) : (
+                        <p className={`font-semibold ${sale.is_voided ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                          {sale.customer_name || 'Walk-in'}
+                        </p>
+                      )}
                       <p className="text-xs text-slate-400 mt-0.5">{formatDateTime(sale.created_at)}</p>
                     </div>
                     <div className="text-right">
@@ -496,9 +514,18 @@ export default function SalesHistory() {
                     <tr key={sale.id} className={`hover:bg-slate-50 ${sale.is_voided ? 'opacity-50' : sale.declined ? 'bg-red-50/30' : ''}`}>
                       <td className="px-4 py-3 text-slate-400 font-mono">#{sale.id}</td>
                       <td className="px-4 py-3">
-                        <p className={`font-medium ${sale.is_voided ? 'line-through text-slate-400' : 'text-slate-800'}`}>
-                          {sale.customer_name || 'Walk-in'}
-                        </p>
+                        {sale.customer_id ? (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setCustomerMenu({ id: sale.customer_id, name: sale.customer_name, rect: e.currentTarget.getBoundingClientRect() }) }}
+                            className={`font-medium text-left text-green-700 hover:underline ${sale.is_voided ? 'line-through' : ''}`}
+                          >
+                            {sale.customer_name || 'Walk-in'}
+                          </button>
+                        ) : (
+                          <p className={`font-medium ${sale.is_voided ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                            {sale.customer_name || 'Walk-in'}
+                          </p>
+                        )}
                         <p className="text-xs text-slate-400">
                           {sale.created_by && <>by {sale.created_by}</>}
                           {sale.verified_by && <span className="text-green-600"> · ✓ {sale.verified_by}</span>}
@@ -529,6 +556,13 @@ export default function SalesHistory() {
         </div>
       </div>
 
+      {customerMenu && (
+        <CustomerActionMenu
+          customer={{ id: customerMenu.id, name: customerMenu.name }}
+          anchorRect={customerMenu.rect}
+          onClose={() => setCustomerMenu(null)}
+        />
+      )}
       {viewSale && <SaleDetailModal sale={viewSale} onClose={() => setViewSale(null)} />}
     </div>
   )

@@ -5,6 +5,7 @@ import { Search, Mail, Download, FileText, ExternalLink } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { receiptsApi } from '../services/api'
 import { formatCurrency, formatDateTime, groupByMonth } from '../utils/format'
+import CustomerActionMenu from '../components/CustomerActionMenu'
 
 const MOCK_RECEIPTS = [
   { id: 1, sale_id: 1, customer_name: 'John Mensah', customer_email: 'john@example.com', total: 3200, emailed_to: 'john@example.com', sent_at: new Date().toISOString() },
@@ -14,6 +15,7 @@ const MOCK_RECEIPTS = [
 export default function Receipts() {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
+  const [customerMenu, setCustomerMenu] = useState(null)
 
   const { data: receipts = MOCK_RECEIPTS } = useQuery({
     queryKey: ['receipts'],
@@ -68,7 +70,16 @@ export default function Receipts() {
           <div key={receipt.id} className="bg-white rounded-xl border border-slate-200 p-4">
             <div className="flex items-start justify-between mb-2">
               <div>
-                <p className="font-semibold text-slate-800">{receipt.customer_name || 'Walk-in'}</p>
+                {receipt.customer_id ? (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setCustomerMenu({ id: receipt.customer_id, name: receipt.customer_name, rect: e.currentTarget.getBoundingClientRect() }) }}
+                    className="font-semibold text-green-700 hover:underline text-left"
+                  >
+                    {receipt.customer_name || 'Walk-in'}
+                  </button>
+                ) : (
+                  <p className="font-semibold text-slate-800">{receipt.customer_name || 'Walk-in'}</p>
+                )}
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-xs text-slate-400">Receipt #{receipt.id}</span>
                   <button
@@ -142,7 +153,18 @@ export default function Receipts() {
                       Sale #{receipt.sale_id} <ExternalLink size={10} />
                     </button>
                   </td>
-                  <td className="px-4 py-3 font-medium text-slate-800">{receipt.customer_name || 'Walk-in'}</td>
+                  <td className="px-4 py-3">
+                    {receipt.customer_id ? (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setCustomerMenu({ id: receipt.customer_id, name: receipt.customer_name, rect: e.currentTarget.getBoundingClientRect() }) }}
+                        className="font-medium text-green-700 hover:underline text-left"
+                      >
+                        {receipt.customer_name || 'Walk-in'}
+                      </button>
+                    ) : (
+                      <span className="font-medium text-slate-800">{receipt.customer_name || 'Walk-in'}</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-slate-500">
                     {receipt.emailed_to
                       ? <span className="flex items-center gap-1"><Mail size={13} className="text-blue-400" />{receipt.emailed_to}</span>
@@ -174,6 +196,13 @@ export default function Receipts() {
           </table>
         </div>
       </div>
+      {customerMenu && (
+        <CustomerActionMenu
+          customer={{ id: customerMenu.id, name: customerMenu.name }}
+          anchorRect={customerMenu.rect}
+          onClose={() => setCustomerMenu(null)}
+        />
+      )}
     </div>
   )
 }

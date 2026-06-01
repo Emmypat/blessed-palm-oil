@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import CustomerActionMenu from '../components/CustomerActionMenu'
 import { Package, ShoppingCart, CreditCard, TrendingUp, AlertTriangle, Clock, Bell, Users } from 'lucide-react'
 import { dashboardApi } from '../services/api'
 import { formatCurrency, formatDate } from '../utils/format'
@@ -36,6 +38,7 @@ const URGENCY_STYLE = {
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const [customerMenu, setCustomerMenu] = useState(null)
   const { data: summary = {}, isLoading } = useQuery({
     queryKey: ['dashboard'],
     queryFn: () => dashboardApi.getSummary().then(r => r.data),
@@ -117,7 +120,16 @@ export default function Dashboard() {
             {(summary.recent_sales || []).map((sale) => (
               <div key={sale.id} className="flex items-center justify-between px-5 py-3.5">
                 <div>
-                  <p className="text-sm font-medium text-slate-700">{sale.customer_name || 'Walk-in'}</p>
+                  {sale.customer_id ? (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setCustomerMenu({ id: sale.customer_id, name: sale.customer_name, rect: e.currentTarget.getBoundingClientRect() }) }}
+                      className="text-sm font-medium text-green-700 hover:underline text-left"
+                    >
+                      {sale.customer_name || 'Walk-in'}
+                    </button>
+                  ) : (
+                    <p className="text-sm font-medium text-slate-700">{sale.customer_name || 'Walk-in'}</p>
+                  )}
                   <p className="text-xs text-slate-400">{formatDate(sale.created_at)}</p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -146,7 +158,12 @@ export default function Dashboard() {
               return (
                 <div key={c.id} className="px-5 py-3.5 flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-slate-800">{c.name}</p>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setCustomerMenu({ id: c.id, name: c.name, rect: e.currentTarget.getBoundingClientRect() }) }}
+                      className="text-sm font-medium text-green-700 hover:underline text-left"
+                    >
+                      {c.name}
+                    </button>
                     <p className="text-xs text-slate-400 mt-0.5">
                       Last purchase: {c.last_purchase_date ? formatDate(c.last_purchase_date) : 'Never'}
                     </p>
@@ -196,6 +213,13 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
+      )}
+      {customerMenu && (
+        <CustomerActionMenu
+          customer={{ id: customerMenu.id, name: customerMenu.name }}
+          anchorRect={customerMenu.rect}
+          onClose={() => setCustomerMenu(null)}
+        />
       )}
     </div>
   )
