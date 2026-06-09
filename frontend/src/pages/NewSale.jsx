@@ -5,6 +5,7 @@ import { useForm, useFieldArray } from 'react-hook-form'
 import { Plus, Trash2, ShoppingCart, WifiOff, Package } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { salesApi, inventoryApi, customersApi } from '../services/api'
+import QuickProductTiles from '../components/QuickProductTiles'
 import { formatCurrency } from '../utils/format'
 import { queueSale } from '../utils/offlineQueue'
 import { useSync } from '../context/SyncContext'
@@ -48,6 +49,25 @@ export default function NewSale() {
   const watchPaymentMethod = watch('payment_method')
 
   const subtotals = watchItems.map(item => (parseFloat(item.unit_price) || 0) * (parseInt(item.qty) || 0))
+
+  const quickProducts = [...products]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, 8)
+
+  const handleQuickSelect = (product) => {
+    const existingIndex = watchItems.findIndex(item => parseInt(item.product_id) === product.id)
+    if (existingIndex !== -1) {
+      setValue(`items.${existingIndex}.qty`, (parseInt(watchItems[existingIndex].qty) || 0) + 1)
+    } else {
+      const emptyIndex = watchItems.findIndex(item => !item.product_id)
+      if (emptyIndex !== -1) {
+        setValue(`items.${emptyIndex}.product_id`, product.id.toString())
+        setValue(`items.${emptyIndex}.unit_price`, product.price)
+      } else {
+        append({ product_id: product.id.toString(), qty: 1, unit_price: product.price })
+      }
+    }
+  }
   const total = subtotals.reduce((a, b) => a + b, 0)
 
   const handleProductChange = (index, productId) => {
@@ -194,6 +214,8 @@ export default function NewSale() {
             </Link>
           </div>
         )}
+
+        <QuickProductTiles products={quickProducts} onSelect={handleQuickSelect} />
 
         <div className="space-y-3">
           {fields.map((field, index) => (
