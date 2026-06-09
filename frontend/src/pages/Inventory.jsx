@@ -175,7 +175,7 @@ export default function Inventory() {
     setAdjustProduct(product)
   }
 
-  const { data: products = MOCK_PRODUCTS } = useQuery({
+  const { data: products = MOCK_PRODUCTS, isFetching: productsFetching } = useQuery({
     queryKey: ['inventory'],
     queryFn: () => inventoryApi.getAll().then(r => r.data),
     placeholderData: MOCK_PRODUCTS,
@@ -381,9 +381,22 @@ export default function Inventory() {
         </button>
       </div>
 
+      {/* Empty state */}
+      {!productsFetching && products.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center bg-white rounded-xl border border-slate-200">
+          <span className="text-5xl mb-4">📦</span>
+          <p className="font-semibold text-slate-700 mb-1">No products yet</p>
+          <p className="text-sm text-slate-400 mb-4">Add your first product to start tracking inventory</p>
+          <button onClick={() => setShowAdd(true)}
+            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-green-700">
+            <Plus size={15} /> Add Product
+          </button>
+        </div>
+      )}
+
       {/* Mobile cards */}
       <div className="sm:hidden space-y-3">
-        {filtered.length === 0 && (
+        {filtered.length === 0 && products.length > 0 && (
           <div className="text-center py-10 text-slate-400">
             <Package size={32} className="mx-auto mb-2 opacity-30" />
             <p className="text-sm">No products found</p>
@@ -441,7 +454,7 @@ export default function Inventory() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.length === 0 && (
+              {filtered.length === 0 && products.length > 0 && (
                 <tr><td colSpan={6} className="text-center py-10 text-slate-400">
                   <Package size={32} className="mx-auto mb-2 opacity-30" />No products found
                 </td></tr>

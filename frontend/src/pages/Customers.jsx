@@ -33,7 +33,7 @@ function PhoneButtons({ phone, customerName, small }) {
       <a
         href={`tel:${phone}`}
         onClick={e => e.stopPropagation()}
-        className={`flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 active:scale-95 ${small ? 'text-xs' : 'text-sm'}`}
+        className={`flex items-center gap-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 active:scale-95 ${small ? 'p-3 text-xs' : 'px-2 py-1 text-sm'}`}
         title="Call / SMS"
       >
         <Phone size={sz} />
@@ -42,7 +42,7 @@ function PhoneButtons({ phone, customerName, small }) {
       <button
         type="button"
         onClick={e => { e.stopPropagation(); openWhatsAppChat(phone, waMessages.generalContact(customerName || '')) }}
-        className={`flex items-center gap-1 px-2 py-1 rounded-lg border border-green-200 text-green-700 hover:bg-green-50 active:scale-95 ${small ? 'text-xs' : 'text-sm'}`}
+        className={`flex items-center gap-1 rounded-lg border border-green-200 text-green-700 hover:bg-green-50 active:scale-95 ${small ? 'p-3 text-xs' : 'px-2 py-1 text-sm'}`}
         title={`Chat with ${customerName || 'customer'} on WhatsApp`}
       >
         <MessageCircle size={sz} />
@@ -196,7 +196,7 @@ export default function Customers() {
   const [editCustomer, setEditCustomer] = useState(null)
   const [analyticsCustomer, setAnalyticsCustomer] = useState(null)
 
-  const { data: customers = [] } = useQuery({
+  const { data: customers = [], isLoading: customersLoading } = useQuery({
     queryKey: ['customers'],
     queryFn: () => customersApi.getAll().then(r => r.data),
   })
@@ -232,9 +232,22 @@ export default function Customers() {
         </button>
       </div>
 
+      {/* Empty state */}
+      {!customersLoading && customers.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center bg-white rounded-xl border border-slate-200">
+          <span className="text-5xl mb-4">👥</span>
+          <p className="font-semibold text-slate-700 mb-1">No customers yet</p>
+          <p className="text-sm text-slate-400 mb-4">Add your first customer to get started</p>
+          <button onClick={() => setShowAdd(true)}
+            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-green-700">
+            <Plus size={15} /> Add Customer
+          </button>
+        </div>
+      )}
+
       {/* Mobile cards */}
       <div className="sm:hidden space-y-3">
-        {filtered.length === 0 && (
+        {filtered.length === 0 && customers.length > 0 && (
           <div className="text-center py-10 text-slate-400">
             <Users size={32} className="mx-auto mb-2 opacity-30" />
             <p className="text-sm">No customers found</p>
@@ -305,7 +318,7 @@ export default function Customers() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.length === 0 && (
+              {filtered.length === 0 && customers.length > 0 && (
                 <tr><td colSpan={7} className="text-center py-10 text-slate-400">
                   <Users size={32} className="mx-auto mb-2 opacity-30" />No customers found
                 </td></tr>

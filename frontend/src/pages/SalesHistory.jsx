@@ -168,18 +168,16 @@ export default function SalesHistory() {
   const location = useLocation()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [dateFilter, setDateFilter] = useState(null)
   const [viewSale, setViewSale] = useState(null)
   const [customerMenu, setCustomerMenu] = useState(null)
   const [expandedActions, setExpandedActions] = useState(null)
 
   // Pre-apply filters from navigation state (e.g. from Customer "View Sales" button)
   useEffect(() => {
-    if (location.state?.filterCustomerName) {
-      setSearch(location.state.filterCustomerName)
-    }
-    if (location.state?.searchSaleId) {
-      setSearch(String(location.state.searchSaleId))
-    }
+    if (location.state?.filterCustomerName) setSearch(location.state.filterCustomerName)
+    if (location.state?.searchSaleId) setSearch(String(location.state.searchSaleId))
+    if (location.state?.dateFilter === 'today') setDateFilter('today')
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: sales = [] } = useQuery({
@@ -261,17 +259,22 @@ export default function SalesHistory() {
     voided:   sales.filter(s => statusOf(s) === 'voided').length,
   }
 
+  const todayStr = new Date().toDateString()
   const filtered = sales.filter(s => {
     const matchSearch =
       (s.customer_name || '').toLowerCase().includes(search.toLowerCase()) ||
       String(s.id).includes(search)
     const matchStatus = statusFilter === 'all' || statusOf(s) === statusFilter
-    return matchSearch && matchStatus
+    const matchDate = !dateFilter || new Date(s.created_at).toDateString() === todayStr
+    return matchSearch && matchStatus && matchDate
   })
 
   const filteredTotal = filtered.reduce((sum, s) => sum + Number(s.total || 0), 0)
   const dayGroups = groupByDay(filtered, 'created_at')
   const pendingDeleteIds = new Set(pendingDeletions.map(d => d.entity_id))
+  const saleById = Object.fromEntries(sales.map(s => [s.id, s]))
+  const pendingVoidApprovals = sales.filter(s => s.void_requested && !s.is_voided)
+  const pendingUnvoidApprovals = sales.filter(s => s.unvoid_requested && s.is_voided)
 
   const SaleActions = ({ sale, mobile }) => {
     if (sale.is_voided) return (
@@ -445,6 +448,16 @@ export default function SalesHistory() {
           </button>
         ))}
       </div>
+
+      {/* Date filter chip */}
+      {dateFilter === 'today' && (
+        <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5 text-xs bg-green-100 text-green-700 px-3 py-1.5 rounded-full font-medium">
+            Today only
+            <button onClick={() => setDateFilter(null)} className="ml-1 text-green-500 hover:text-green-700 font-bold">×</button>
+          </span>
+        </div>
+      )}
 
       {/* Summary strip */}
       {filtered.length > 0 && (

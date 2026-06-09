@@ -4,7 +4,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { Plus, Trash2, ShoppingCart, WifiOff, Package } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { salesApi, inventoryApi, customersApi } from '../services/api'
+import { salesApi, inventoryApi, customersApi, receivablesApi } from '../services/api'
 import QuickProductTiles from '../components/QuickProductTiles'
 import { formatCurrency } from '../utils/format'
 import { queueSale } from '../utils/offlineQueue'
@@ -47,6 +47,17 @@ export default function NewSale() {
   const { fields, append, remove } = useFieldArray({ control, name: 'items' })
   const watchItems = watch('items')
   const watchPaymentMethod = watch('payment_method')
+  const watchCustomerId = watch('customer_id')
+  const watchCustomerName = watch('customer_name')
+
+  const { data: customerReceivables = [] } = useQuery({
+    queryKey: ['receivables-customer', watchCustomerId],
+    queryFn: () => receivablesApi.getAll({ customer_id: parseInt(watchCustomerId) }).then(r => r.data),
+    enabled: !!watchCustomerId,
+  })
+  const outstandingBalance = customerReceivables
+    .filter(r => !r.paid)
+    .reduce((sum, r) => sum + (r.amount_owed - r.amount_paid), 0)
 
   const subtotals = watchItems.map(item => (parseFloat(item.unit_price) || 0) * (parseInt(item.qty) || 0))
 
@@ -188,6 +199,16 @@ export default function NewSale() {
             <input type="email" {...register('customer_email')} placeholder="customer@email.com" className={inputCls} />
           </div>
         </div>
+        {outstandingBalance > 0 && (
+          <div className="flex items-center gap-2 bg-yellow-50 border border-yellow-300 rounded-xl px-4 py-3">
+            <span className="text-yellow-600 text-base shrink-0">⚠️</span>
+            <p className="text-sm text-yellow-800 font-medium">
+              {watchCustomerName || 'This customer'} has{' '}
+              <span className="font-bold">₦{Number(outstandingBalance).toLocaleString()}</span>{' '}
+              outstanding balance
+            </p>
+          </div>
+        )}
         <p className="text-xs text-slate-400">New customers are automatically saved to your customer list.</p>
       </div>
 

@@ -74,12 +74,11 @@ export default function Receivables() {
   const [customerMenu, setCustomerMenu] = useState(null)
 
   useEffect(() => {
-    if (location.state?.filterCustomerName) {
-      setSearch(location.state.filterCustomerName)
-    }
+    if (location.state?.filterCustomerName) setSearch(location.state.filterCustomerName)
+    if (location.state?.statusFilter) setFilter(location.state.statusFilter)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { data: receivables = [] } = useQuery({
+  const { data: receivables = [], isLoading: receivablesLoading } = useQuery({
     queryKey: ['receivables'],
     queryFn: () => receivablesApi.getAll().then(r => r.data),
   })
@@ -205,9 +204,22 @@ export default function Receivables() {
         </div>
       </div>
 
+      {/* Empty state */}
+      {!receivablesLoading && receivables.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center bg-white rounded-xl border border-slate-200">
+          <span className="text-5xl mb-4">✅</span>
+          <p className="font-semibold text-slate-700 mb-1">No outstanding receivables</p>
+          <p className="text-sm text-slate-400 mb-4">Credit sales will appear here once recorded</p>
+          <button onClick={() => navigate('/sales/new')}
+            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-green-700">
+            Record a Credit Sale
+          </button>
+        </div>
+      )}
+
       {/* Mobile cards */}
       <div className="sm:hidden space-y-3">
-        {filtered.length === 0 && <p className="text-center text-slate-400 py-8 text-sm">No receivables found</p>}
+        {filtered.length === 0 && receivables.length > 0 && <p className="text-center text-slate-400 py-8 text-sm">No receivables found</p>}
         {groupByMonth(filtered, 'created_at').map(([month, items]) => (
           <div key={month}>
             <div className="sticky top-0 z-10 bg-slate-100 text-slate-500 text-xs font-semibold uppercase tracking-wider px-3 py-1.5 rounded-lg mb-2">{month}</div>
@@ -291,7 +303,7 @@ export default function Receivables() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.length === 0 && (
+              {filtered.length === 0 && receivables.length > 0 && (
                 <tr><td colSpan={8} className="text-center py-10 text-slate-400 text-sm">No receivables found</td></tr>
               )}
               {groupByMonth(filtered, 'created_at').map(([month, items]) => (

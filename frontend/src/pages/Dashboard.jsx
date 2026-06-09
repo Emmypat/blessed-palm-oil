@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import CustomerActionMenu from '../components/CustomerActionMenu'
-import { Package, ShoppingCart, CreditCard, TrendingUp, AlertTriangle, Clock, Bell, Users } from 'lucide-react'
+import { Package, ShoppingCart, CreditCard, TrendingUp, AlertTriangle, Clock, Bell, Users, ChevronRight } from 'lucide-react'
 import { dashboardApi } from '../services/api'
 import { formatCurrency, formatDate } from '../utils/format'
 
@@ -10,16 +10,17 @@ function StatCard({ icon: Icon, label, value, sub, color, onClick }) {
   return (
     <div
       onClick={onClick}
-      className={`bg-white rounded-xl border border-slate-200 p-5 flex items-start gap-4 ${onClick ? 'cursor-pointer hover:border-slate-300 hover:shadow-sm transition-shadow' : ''}`}
+      className={`bg-white rounded-xl border border-slate-200 p-5 flex items-center gap-4 ${onClick ? 'cursor-pointer hover:border-slate-300 hover:shadow-sm transition-shadow' : ''}`}
     >
-      <div className={`p-2.5 rounded-lg ${color}`}>
+      <div className={`p-2.5 rounded-lg ${color} shrink-0`}>
         <Icon size={20} className="text-white" />
       </div>
-      <div>
+      <div className="flex-1 min-w-0">
         <p className="text-sm text-slate-500">{label}</p>
         <p className="text-2xl font-bold text-slate-800 mt-0.5">{value}</p>
         {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
       </div>
+      {onClick && <ChevronRight size={16} className="text-slate-400 shrink-0" />}
     </div>
   )
 }
@@ -67,7 +68,7 @@ export default function Dashboard() {
           value={summary.today_sales ?? '—'}
           sub={formatCurrency(summary.today_revenue ?? 0)}
           color="bg-green-600"
-          onClick={() => navigate('/sales/history')}
+          onClick={() => navigate('/sales/history', { state: { dateFilter: 'today' } })}
         />
         <StatCard
           icon={CreditCard}
@@ -75,7 +76,7 @@ export default function Dashboard() {
           value={formatCurrency(summary.total_receivables ?? 0)}
           sub={`${summary.overdue_count ?? 0} overdue`}
           color="bg-red-500"
-          onClick={() => navigate('/receivables')}
+          onClick={() => navigate('/receivables', { state: { statusFilter: 'unpaid' } })}
         />
         <StatCard
           icon={TrendingUp}
@@ -83,7 +84,7 @@ export default function Dashboard() {
           value={formatCurrency(summary.today_revenue ?? 0)}
           sub="cash + card + mobile"
           color="bg-purple-500"
-          onClick={() => navigate('/sales/history')}
+          onClick={() => navigate('/sales/history', { state: { dateFilter: 'today' } })}
         />
       </div>
 

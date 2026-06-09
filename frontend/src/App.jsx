@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { Toaster } from 'react-hot-toast'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { SyncProvider } from './context/SyncContext'
 import Layout from './components/Layout'
+import OfflineIndicator from './components/OfflineIndicator'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Inventory from './pages/Inventory'
@@ -124,6 +126,8 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <SyncProvider>
+          <OfflineIndicator />
+          <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
           <AppRoutes />
         </SyncProvider>
       </AuthProvider>
