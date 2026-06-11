@@ -82,10 +82,10 @@ export default function NewSale() {
   const total = subtotals.reduce((a, b) => a + b, 0)
 
   const handleProductChange = (index, productId) => {
+    setValue(`items.${index}.product_id`, productId)
     const product = products.find(p => p.id === parseInt(productId))
     if (product) {
       setValue(`items.${index}.unit_price`, product.price)
-      // Auto-advance to qty field
       setTimeout(() => qtyRefs.current[index]?.focus(), 60)
     }
   }
